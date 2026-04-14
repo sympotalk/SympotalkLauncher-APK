@@ -28,6 +28,19 @@ jobs:
           gradle-version: '8.6'
           cache-read-only: false
 
+      # version.txt 와 build.gradle versionName 일치 검증 (버전 혼선 방지)
+      - name: Verify version consistency
+        run: |
+          VERSION_TXT=$(cat version.txt | tr -d '[:space:]')
+          VERSION_GRADLE=$(grep -oE 'versionName "([^"]+)"' android-app/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+          echo "version.txt     = $VERSION_TXT"
+          echo "build.gradle    = $VERSION_GRADLE"
+          if [ "$VERSION_TXT" != "$VERSION_GRADLE" ]; then
+            echo "::error::version.txt ($VERSION_TXT) 와 build.gradle versionName ($VERSION_GRADLE) 이 다릅니다!"
+            echo "::error::두 값을 동일하게 맞춰주세요."
+            exit 1
+          fi
+
       # keystore 존재 여부 확인 (없으면 서명 불일치 → 업데이트 불가)
       - name: Check signing keystore
         run: |

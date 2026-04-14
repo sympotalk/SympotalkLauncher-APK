@@ -899,7 +899,8 @@
             <strong>Sympotalk 행사 런처</strong><br>
             링크 기본 주소: <strong id="app-base-url">-</strong><br>
             Supabase: sympotalkv2<br>
-            버전: <span id="app-version">-</span><br>
+            <span style="color:#94a3b8">APK 버전 (네이티브):</span> <strong id="app-version-native" style="color:#f1f5f9">-</strong><br>
+            <span style="color:#94a3b8">웹 콘텐츠 버전:</span> <span id="app-version-content" style="color:#64748b;font-size:11px">-</span><br>
             실행 환경: <span id="app-env">웹</span>
           </div>
         </div>
@@ -2006,10 +2007,13 @@ function startAppDownload() {
     return;
   }
   document.getElementById('app-update-available').style.display = 'none';
+  document.getElementById('app-install-failed').style.display = 'none';
   document.getElementById('app-download-progress-wrap').style.display = 'block';
   document.getElementById('app-download-percent').textContent = '0%';
   document.getElementById('app-download-bar').style.width = '0%';
   document.getElementById('app-update-status').textContent = '📥 다운로드를 시작합니다...';
+  // 설치 실패 감지를 위한 타임스탬프
+  try { localStorage.setItem('expecting_since', String(Date.now())); } catch(e) {}
   try {
     AndroidBridge.downloadAndInstallApk(pendingApkUrl);
   } catch(e) {
@@ -2025,8 +2029,8 @@ window.onAppDownloadProgress = function(percent) {
 window.onAppDownloadComplete = function() {
   document.getElementById('app-download-progress-wrap').style.display = 'none';
   document.getElementById('app-update-status').innerHTML = '✅ 다운로드 완료 · <strong>설치 화면으로 이동합니다</strong>';
-  // 설치 실패 감지 플래그 설정 — 앱이 다시 포커스를 받을 때 버전 확인
-  try { sessionStorage.setItem('expecting_update_to', pendingUpdateVersion || ''); } catch(e) {}
+  // 설치 성공/실패 감지 플래그: localStorage 로 APK 재시작 후에도 유지
+  try { localStorage.setItem('expecting_update_to', pendingUpdateVersion || ''); } catch(e) {}
 };
 
 window.onAppDownloadError = function(msg) {
@@ -2035,24 +2039,39 @@ window.onAppDownloadError = function(msg) {
 };
 
 // 설치 시도 후 앱 복귀 시 실제 설치 성공 여부 확인
+// — localStorage 사용: APK 재설치로 프로세스 kill 된 뒤에도 유지
+// — BuildConfig.VERSION_NAME (native) 을 단일 진실로 사용
 function checkInstallOutcome() {
   var expecting;
-  try { expecting = sessionStorage.getItem('expecting_update_to'); } catch(e) { return; }
+  try { expecting = localStorage.getItem('expecting_update_to'); } catch(e) { return; }
   if (!expecting) return;
 
-  var current = '';
-  if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
-    try { current = AndroidBridge.getAppVersion(); } catch(e) {}
-  }
-  // 현재 버전이 기대한 버전과 다르면 설치 실패 (주로 서명 불일치)
-  if (current && current !== expecting) {
-    document.getElementById('app-install-failed').style.display = 'block';
-    document.getElementById('app-update-available').style.display = 'none';
-  } else if (current === expecting) {
-    // 실제로 업데이트 됐으면 WebView 리로드 (새 Bridge 로 갱신)
+  // Native Bridge 없으면 판단 불가 — flag 만 유지
+  if (!hasNativeBridge || typeof AndroidBridge.getAppVersion !== 'function') return;
+
+  var currentNative = '';
+  try { currentNative = AndroidBridge.getAppVersion(); } catch(e) { return; }
+  if (!currentNative) return;
+
+  // BuildConfig.VERSION_NAME 기준 비교 (authoritative)
+  if (currentNative === expecting) {
+    // 실제로 APK 가 업데이트 됨
     showToast('✅ v' + expecting + ' 으로 업데이트 완료');
+    try { localStorage.removeItem('expecting_update_to'); } catch(e) {}
+  } else {
+    // 아직 APK 가 업데이트 안 됨 → 설치 실패 (서명 불일치 등) 또는 사용자가 설치 취소
+    // 단, 다운로드 완료 후 일정 시간(2분) 지나도 업데이트 안 됐으면 실패로 간주
+    var ts = 0;
+    try { ts = parseInt(localStorage.getItem('expecting_since') || '0', 10); } catch(e) {}
+    if (ts && (Date.now() - ts) > 120000) {
+      document.getElementById('app-install-failed').style.display = 'block';
+      document.getElementById('app-update-available').style.display = 'none';
+      try {
+        localStorage.removeItem('expecting_update_to');
+        localStorage.removeItem('expecting_since');
+      } catch(e) {}
+    }
   }
-  sessionStorage.removeItem('expecting_update_to');
 }
 
 // 기존 앱 삭제 후 재설치 플로우
@@ -2075,31 +2094,39 @@ document.addEventListener('visibilitychange', function() {
 });
 
 /* ═══════════════════════════════════════════════════════
-   VERSION LOADER (XMLHttpRequest - file:// 호환)
+   VERSION LOADERS — 두 개의 독립적인 버전 시스템을 분리 표기
+   1) APK 버전: BuildConfig.VERSION_NAME (AndroidBridge.getAppVersion)
+      - 실제 설치된 APK 의 버전. 업데이트 판단의 단일 진실.
+   2) 웹 콘텐츠 버전: version.txt (XHR)
+      - Cloudflare 에서 auto-download 된 HTML 번들의 버전.
+      - APK 업데이트 없이도 바뀔 수 있어 별도 표기.
 ═══════════════════════════════════════════════════════ */
 function loadAppVersion() {
-  var verEl = document.getElementById('app-version');
-  if (!verEl) return;
-
-  var xhr = new XMLHttpRequest();
-  try {
-    xhr.open('GET', 'version.txt?_=' + Date.now(), true);
-  } catch(e) {
-    verEl.textContent = '(열기실패)';
-    return;
+  // 1) APK 네이티브 버전 (authoritative)
+  var nativeEl = document.getElementById('app-version-native');
+  if (nativeEl) {
+    if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
+      try { nativeEl.textContent = AndroidBridge.getAppVersion(); }
+      catch(e) { nativeEl.textContent = '(확인불가)'; }
+    } else {
+      nativeEl.textContent = '(웹)';
+    }
   }
+
+  // 2) 웹 콘텐츠 버전 (information only)
+  var contentEl = document.getElementById('app-version-content');
+  if (!contentEl) return;
+  var xhr = new XMLHttpRequest();
+  try { xhr.open('GET', 'version.txt?_=' + Date.now(), true); }
+  catch(e) { contentEl.textContent = '(n/a)'; return; }
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== 4) return;
-    // file:// 프로토콜에서는 status=0 이지만 responseText는 정상
     var ok = (xhr.status === 200 || xhr.status === 0);
-    if (ok && xhr.responseText) {
-      verEl.textContent = xhr.responseText.trim() || '(빈파일)';
-    } else {
-      verEl.textContent = '(확인불가)';
-    }
+    if (ok && xhr.responseText) contentEl.textContent = xhr.responseText.trim();
+    else contentEl.textContent = '(n/a)';
   };
-  xhr.onerror = function() { verEl.textContent = '(네트워크오류)'; };
-  try { xhr.send(null); } catch(e) { verEl.textContent = '(전송실패)'; }
+  xhr.onerror = function() { contentEl.textContent = '(n/a)'; };
+  try { xhr.send(null); } catch(e) { contentEl.textContent = '(n/a)'; }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2165,6 +2192,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // BASE_URL 변수를 UI에 주입 (하드코딩 방지)
   var baseEl = document.getElementById('app-base-url');
   if (baseEl) baseEl.textContent = BASE_URL;
+
+  // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
+  setTimeout(checkInstallOutcome, 800);
 
   // 버전 표시 (version.txt 동적 로드)
   // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용

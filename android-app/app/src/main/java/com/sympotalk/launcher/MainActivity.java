@@ -213,9 +213,10 @@ public class MainActivity extends AppCompatActivity {
             }
             @Override public void onUpdateComplete(String ver) {
                 runOnUiThread(() -> {
+                    // 웹 콘텐츠만 갱신된 것. "APK 업데이트" 와 구분 위해 별도 문구.
+                    // 사용자 혼란 방지: 토스트는 표시하되 짧고 명시적으로.
                     Toast.makeText(MainActivity.this,
-                        "업데이트 완료 (" + ver + ") - 재시작하면 적용됩니다", Toast.LENGTH_LONG).show();
-                    // 바로 적용: 최신 파일로 reload
+                        "웹 콘텐츠 갱신됨 (v" + ver + ")", Toast.LENGTH_SHORT).show();
                     File f = new UpdateManager(MainActivity.this, BuildConfig.CLOUDFLARE_URL)
                         .getUpdatedIndexFile();
                     if (f != null) webView.loadUrl("file://" + f.getAbsolutePath());
