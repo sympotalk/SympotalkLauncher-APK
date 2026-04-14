@@ -29,6 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 1001;
     private static final int REQ_LOCATION = 1002;
     private static final int REQ_STARTUP = 1003;
+    private boolean hasEverRequestedLocation = false;   // 최초 요청 플래그
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +83,9 @@ public class MainActivity extends AppCompatActivity {
             toRequest.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
         if (!toRequest.isEmpty()) {
+            if (toRequest.contains(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                hasEverRequestedLocation = true;
+            }
             ActivityCompat.requestPermissions(this,
                 toRequest.toArray(new String[0]), REQ_STARTUP);
         }
@@ -376,11 +380,37 @@ public class MainActivity extends AppCompatActivity {
                 Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         }
 
-        /** JS 에서 위치 권한 요청 */
+        /**
+         * JS 에서 위치 권한 요청.
+         * "다시 묻지 않음" 상태면 시스템 다이얼로그 대신 앱 설정 화면을 엶.
+         */
         @JavascriptInterface
         public void requestLocationPermission() {
-            runOnUiThread(() -> ActivityCompat.requestPermissions(MainActivity.this,
-                new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION));
+            runOnUiThread(() -> {
+                boolean alreadyGranted = ContextCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+                if (alreadyGranted) return;
+
+                boolean canShowDialog = ActivityCompat.shouldShowRequestPermissionRationale(
+                    MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION);
+
+                if (canShowDialog || !hasEverRequestedLocation) {
+                    hasEverRequestedLocation = true;
+                    ActivityCompat.requestPermissions(MainActivity.this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION);
+                } else {
+                    // "다시 묻지 않음" 상태 → 앱 상세 설정으로 유도
+                    Toast.makeText(MainActivity.this,
+                        "설정 → 권한 → 위치에서 직접 허용해주세요", Toast.LENGTH_LONG).show();
+                    try {
+                        Intent intent = new Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName()));
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
+                }
+            });
         }
 
         /**
