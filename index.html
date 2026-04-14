@@ -951,11 +951,13 @@
 /* ═══════════════════════════════════════════════════════
    CONFIG (하드코딩 - 변경 불필요)
 ═══════════════════════════════════════════════════════ */
-var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';
+var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';   // Fallback only
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHFuZnd1dmhsYW90dGNucGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2OTYxMzMsImV4cCI6MjA4MzI3MjEzM30.F6pA27vkaAJFjK54vkYPbOI7K1LE2tQFVaPG-bA8r3c';
-var BASE_URL = 'https://sympopad.com';   // 참석자·운영자 링크 기본 주소
-var REFRESH_INTERVAL = 5 * 60 * 1000;    // 5분마다 자동 갱신
-var KEEPALIVE_INTERVAL = 55 * 1000;      // 55초마다 keepalive
+var BASE_URL = 'https://sympopad.com';                            // 참석자/운영자 링크 기본 주소
+var PROXY_URL = 'https://sympotalklauncher-apk.pages.dev';         // Cloudflare Pages Functions 프록시
+// 300~500대 규모 대응: auto 갱신 10분, 지터로 Thundering Herd 방지
+var REFRESH_INTERVAL = 10 * 60 * 1000;   // 10분 (± 최대 30초 지터)
+var REFRESH_JITTER   = 30 * 1000;        // 30초 이내 랜덤 분산
 
 // Android APK 에서 주입되는 Native 브릿지 (JS Interface)
 var hasNativeBridge = (typeof AndroidBridge !== 'undefined');
@@ -971,8 +973,7 @@ var state = {
   scannerStream: null,
   scannerRAF: null,
   wakeLock: null,
-  refreshTimer: null,
-  keepaliveTimer: null
+  refreshTimer: null
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -1367,6 +1368,27 @@ function supaFetch(path, params) {
   }).then(function(r) { return r.json(); });
 }
 
+/**
+ * Cloudflare 프록시를 먼저 시도하고 실패하면 Supabase 직접 호출 (fallback)
+ * — 300~500대 동시 접속 시 Supabase 부하 제거. 엣지 캐시 15초.
+ */
+function proxyFetch(endpoint, fallbackFn) {
+  var proxyUrl = PROXY_URL + endpoint;
+  return fetch(proxyUrl, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  }).then(function(r) {
+    if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
+    return r.json();
+  }).catch(function(err) {
+    // 프록시 실패 시 Supabase 직접 호출
+    if (typeof fallbackFn === 'function') {
+      return fallbackFn();
+    }
+    throw err;
+  });
+}
+
 /* ═══════════════════════════════════════════════════════
    EVENT LIST
 ═══════════════════════════════════════════════════════ */
@@ -1376,11 +1398,13 @@ function loadEvents() {
   spinner.style.display = 'inline-block';
   container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
 
-  // 날짜 필터 제거 → status 만으로 필터. 종료된 행사는 상태 배지로 구분 표시.
-  supaFetch('events', {
-    'select': 'id,name,slug,status,start_date,end_date,agency',
-    'status': 'in.(active,draft)',
-    'order': 'start_date.asc.nullslast'
+  // 프록시 먼저 시도 → 실패 시 Supabase 직접 (fallback)
+  proxyFetch('/api/events', function() {
+    return supaFetch('events', {
+      'select': 'id,name,slug,status,start_date,end_date,agency',
+      'status': 'in.(active,draft)',
+      'order': 'start_date.asc.nullslast'
+    });
   }).then(function(events) {
     spinner.style.display = 'none';
     renderEventList(events);
@@ -1507,10 +1531,13 @@ function openEventDetail(event) {
   var warnEl = document.getElementById('detail-url-warning');
   if (warnEl) warnEl.style.display = 'none';
 
-  supaFetch('rooms', {
-    'select': 'id,name,slug,chair_token,console_token,moderator_token,speaker_token',
-    'event_id': 'eq.' + event.id,
-    'order': 'sort_order.asc.nullslast'
+  // 프록시 우선, 실패 시 Supabase 직접 호출
+  proxyFetch('/api/rooms?event_id=' + encodeURIComponent(event.id), function() {
+    return supaFetch('rooms', {
+      'select': 'id,name,slug,chair_token,console_token,moderator_token,speaker_token',
+      'event_id': 'eq.' + event.id,
+      'order': 'sort_order.asc.nullslast'
+    });
   }).then(function(rooms) {
     renderDetailLinks(event, rooms);
   }).catch(function(err) {
@@ -1807,29 +1834,32 @@ document.addEventListener('visibilitychange', function() {
 });
 
 /* ═══════════════════════════════════════════════════════
-   KEEPALIVE TIMER
+   REFRESH TIMER (지터로 Thundering Herd 방지)
+   - keepalive Supabase 핑은 완전 제거 (효과 없음 + 부하)
+   - Service Worker 핑만 유지 (앱 프로세스 keepalive)
 ═══════════════════════════════════════════════════════ */
-function startKeepaliveLoop() {
-  state.keepaliveTimer = setInterval(function() {
-    // Supabase에 가벼운 ping (행사 1건)
-    fetch(SUPABASE_URL + '/rest/v1/events?select=id&limit=1', {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-    }).catch(function() {});
-
-    // Service Worker keepalive
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-      var ch = new MessageChannel();
-      navigator.serviceWorker.controller.postMessage('keepalive', [ch.port2]);
-    }
-  }, KEEPALIVE_INTERVAL);
+function startRefreshLoop() {
+  // 초기 지터: 0~REFRESH_JITTER 랜덤 지연 후 첫 갱신
+  var jitter = Math.floor(Math.random() * REFRESH_JITTER);
+  setTimeout(function tick() {
+    if (state.currentView === 'home') loadEvents();
+    // 다음 주기도 지터를 더해 300~500대 태블릿이 동시 히트하지 않도록 분산
+    var nextDelay = REFRESH_INTERVAL + Math.floor(Math.random() * REFRESH_JITTER);
+    state.refreshTimer = setTimeout(tick, nextDelay);
+  }, jitter);
 }
 
-function startRefreshLoop() {
-  state.refreshTimer = setInterval(function() {
-    if (state.currentView === 'home') {
-      loadEvents();
+// Service Worker 로만 keepalive (Supabase 핑 제거)
+function startSWKeepalive() {
+  if (!navigator.serviceWorker) return;
+  setInterval(function() {
+    if (navigator.serviceWorker.controller) {
+      var ch = new MessageChannel();
+      try {
+        navigator.serviceWorker.controller.postMessage('keepalive', [ch.port2]);
+      } catch(e) {}
     }
-  }, REFRESH_INTERVAL);
+  }, 5 * 60 * 1000);  // 5분
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1842,9 +1872,10 @@ function runNetworkDiagnostic() {
   resultEl.innerHTML = '테스트 중...';
 
   var targets = [
-    { name: 'Supabase',   url: SUPABASE_URL + '/rest/v1/' },
-    { name: 'GitHub API', url: 'https://api.github.com' },
-    { name: 'Cloudflare', url: 'https://sympotalklauncher-apk.pages.dev/version.txt?_=' + Date.now() }
+    { name: 'Proxy /api/events', url: PROXY_URL + '/api/events' },
+    { name: 'Proxy /api/health', url: PROXY_URL + '/api/health' },
+    { name: 'Supabase (직접)',   url: SUPABASE_URL + '/rest/v1/' },
+    { name: 'GitHub API',        url: 'https://api.github.com' }
   ];
 
   var results = [];
@@ -2119,8 +2150,8 @@ function registerServiceWorker() {
 document.addEventListener('DOMContentLoaded', function() {
   registerServiceWorker();
   loadEvents();
-  startKeepaliveLoop();
-  startRefreshLoop();
+  startSWKeepalive();   // Service Worker only (Supabase 핑 제거)
+  startRefreshLoop();   // 지터 적용된 10분 주기
 
   // 실행 환경 표시 (APK vs 웹)
   var envEl = document.getElementById('app-env');
