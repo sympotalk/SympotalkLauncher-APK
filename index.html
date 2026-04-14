@@ -787,6 +787,49 @@
         </div>
 
         <div class="settings-group">
+          <div class="settings-group-title">앱 업데이트</div>
+          <div class="settings-item">
+            <div class="settings-label">APK 자동 업데이트</div>
+            <div class="settings-desc">
+              GitHub Releases 에서 최신 APK 확인. 발견 시 <strong>앱 내에서 바로 다운로드 + 설치</strong> 가능.
+              삭제 없이 업데이트 됩니다 (v1.0.11+ 빌드부터).
+            </div>
+
+            <div id="app-update-panel" style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:8px;font-size:13px;color:#94a3b8;padding:8px 0">
+                <span>현재: <strong id="app-update-current" style="color:#f1f5f9">-</strong></span>
+                <span style="margin-left:auto">최신: <strong id="app-update-latest" style="color:#60a5fa">-</strong></span>
+              </div>
+              <button class="btn-save" onclick="checkAppUpdate()" id="btn-check-app-update">
+                🔄 업데이트 확인
+              </button>
+              <div id="app-update-status" style="font-size:12px;color:#64748b;text-align:center;padding:4px 0"></div>
+
+              <!-- 다운로드 진행 바 -->
+              <div id="app-download-progress-wrap" style="display:none;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">
+                  📥 다운로드 중... <span id="app-download-percent">0%</span>
+                </div>
+                <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden">
+                  <div id="app-download-bar" style="height:100%;background:#60a5fa;width:0%;transition:width 0.3s"></div>
+                </div>
+              </div>
+
+              <!-- 업데이트 발견 시 나타나는 패널 -->
+              <div id="app-update-available" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:12px">
+                <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:6px">
+                  🆕 새 버전 <span id="app-update-avail-version">-</span> 이 있습니다
+                </div>
+                <div id="app-update-avail-notes" style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:10px;max-height:120px;overflow-y:auto;white-space:pre-line"></div>
+                <button class="btn-save" onclick="startAppDownload()" style="background:#22c55e;color:#052e16;font-weight:700">
+                  📥 지금 업데이트
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-group-title">화면 절전 방지</div>
           <div class="settings-item">
             <div class="settings-label">절전 방지</div>
@@ -1192,10 +1235,10 @@ function showView(name) {
   var titles = { home: '행사 런처', wifi: 'QR 스캔', settings: '설정', detail: '행사 상세', browser: '' };
   titleEl.textContent = titles[name] || '';
 
-  // 설정 탭 진입 시 현재 WiFi 상태 갱신
+  // 설정 탭 진입 시 현재 WiFi 상태 + 앱 버전 갱신
   if (name === 'settings') {
     updateCurrentWifi();
-    // 저장된 기본 비밀번호 입력창에 표시
+    updateCurrentAppVersion();
     var pwInput = document.getElementById('input-default-wifi-pw');
     if (pwInput) pwInput.value = getDefaultWifiPassword();
   }
@@ -1660,6 +1703,106 @@ function startRefreshLoop() {
     }
   }, REFRESH_INTERVAL);
 }
+
+/* ═══════════════════════════════════════════════════════
+   APP UPDATE (APK 자동 업데이트 - Native Bridge 연동)
+═══════════════════════════════════════════════════════ */
+var pendingApkUrl = null;
+
+function hasAppUpdateBridge() {
+  return hasNativeBridge
+    && typeof AndroidBridge.checkAppUpdate === 'function'
+    && typeof AndroidBridge.downloadAndInstallApk === 'function';
+}
+
+function updateCurrentAppVersion() {
+  var el = document.getElementById('app-update-current');
+  if (!el) return;
+  if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
+    try { el.textContent = AndroidBridge.getAppVersion(); } catch(e) { el.textContent = '-'; }
+  } else {
+    el.textContent = '(웹)';
+  }
+}
+
+function checkAppUpdate() {
+  var statusEl = document.getElementById('app-update-status');
+  var btnEl = document.getElementById('btn-check-app-update');
+
+  if (!hasAppUpdateBridge()) {
+    statusEl.innerHTML = 'APK 환경에서만 사용 가능. <strong>v1.0.11+ APK 설치 필요</strong>';
+    return;
+  }
+  statusEl.textContent = '🔍 최신 버전 확인 중...';
+  btnEl.disabled = true;
+  document.getElementById('app-update-available').style.display = 'none';
+
+  try {
+    AndroidBridge.checkAppUpdate();
+  } catch(e) {
+    statusEl.textContent = '확인 실패: ' + e.message;
+    btnEl.disabled = false;
+  }
+}
+
+// Native → JS 콜백
+window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
+  var statusEl = document.getElementById('app-update-status');
+  var btnEl = document.getElementById('btn-check-app-update');
+  var latestEl = document.getElementById('app-update-latest');
+  var panelEl = document.getElementById('app-update-available');
+  btnEl.disabled = false;
+
+  if (status === 'available') {
+    latestEl.textContent = latestVersion;
+    latestEl.style.color = '#22c55e';
+    statusEl.textContent = '✅ 새 버전 발견';
+    document.getElementById('app-update-avail-version').textContent = 'v' + latestVersion;
+    document.getElementById('app-update-avail-notes').textContent = (notes || '').slice(0, 500);
+    pendingApkUrl = apkUrl;
+    panelEl.style.display = 'block';
+  } else if (status === 'uptodate') {
+    latestEl.textContent = latestVersion;
+    latestEl.style.color = '#94a3b8';
+    statusEl.textContent = '✅ 최신 버전을 사용 중입니다';
+    panelEl.style.display = 'none';
+  } else {
+    statusEl.textContent = '❌ ' + (notes || '확인 실패');
+    panelEl.style.display = 'none';
+  }
+};
+
+function startAppDownload() {
+  if (!pendingApkUrl) {
+    alert('다운로드 URL 이 없습니다. 업데이트 확인을 먼저 실행해주세요.');
+    return;
+  }
+  document.getElementById('app-update-available').style.display = 'none';
+  document.getElementById('app-download-progress-wrap').style.display = 'block';
+  document.getElementById('app-download-percent').textContent = '0%';
+  document.getElementById('app-download-bar').style.width = '0%';
+  document.getElementById('app-update-status').textContent = '📥 다운로드를 시작합니다...';
+  try {
+    AndroidBridge.downloadAndInstallApk(pendingApkUrl);
+  } catch(e) {
+    document.getElementById('app-update-status').textContent = '다운로드 시작 실패: ' + e.message;
+  }
+}
+
+window.onAppDownloadProgress = function(percent) {
+  document.getElementById('app-download-percent').textContent = percent + '%';
+  document.getElementById('app-download-bar').style.width = percent + '%';
+};
+
+window.onAppDownloadComplete = function() {
+  document.getElementById('app-download-progress-wrap').style.display = 'none';
+  document.getElementById('app-update-status').innerHTML = '✅ 다운로드 완료 · <strong>설치 화면으로 이동합니다</strong>';
+};
+
+window.onAppDownloadError = function(msg) {
+  document.getElementById('app-download-progress-wrap').style.display = 'none';
+  document.getElementById('app-update-status').innerHTML = '❌ ' + msg;
+};
 
 /* ═══════════════════════════════════════════════════════
    VERSION LOADER (XMLHttpRequest - file:// 호환)

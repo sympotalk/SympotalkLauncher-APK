@@ -25,6 +25,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private PermissionRequest pendingPermission;
     private WifiHelper wifiHelper;
+    private AppUpdateManager appUpdateManager;
     private static final int REQ_CAMERA = 1001;
     private static final int REQ_LOCATION = 1002;
 
@@ -58,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(webView);
 
         wifiHelper = new WifiHelper(this);
+        appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
         setupWebView();
         checkCameraPermission();
         checkForUpdates();
@@ -382,6 +384,74 @@ public class MainActivity extends AppCompatActivity {
                             success + "," + jsonStringify(message) + ")");
                     }
                 });
+        }
+
+        // ══════════════════════ APK 자동 업데이트 ══════════════════════
+
+        /** 현재 앱 버전 (네이티브) */
+        @JavascriptInterface
+        public String getAppVersion() { return BuildConfig.VERSION_NAME; }
+
+        /**
+         * GitHub Releases 에서 최신 APK 확인.
+         * 결과: window.onAppUpdateResult(status, latestVersion, apkUrl, notes)
+         *   status: "available" | "uptodate" | "error"
+         */
+        @JavascriptInterface
+        public void checkAppUpdate() {
+            appUpdateManager.checkForUpdate(new AppUpdateManager.CheckCallback() {
+                @Override public void onUpdateAvailable(String latestVersion, String apkUrl, String notes) {
+                    jsCallback("window.onAppUpdateResult && onAppUpdateResult('available'," +
+                        jsonStringify(latestVersion) + "," + jsonStringify(apkUrl) + "," + jsonStringify(notes) + ")");
+                }
+                @Override public void onUpToDate(String currentVersion) {
+                    jsCallback("window.onAppUpdateResult && onAppUpdateResult('uptodate'," +
+                        jsonStringify(currentVersion) + ",null,null)");
+                }
+                @Override public void onCheckFailed(String reason) {
+                    jsCallback("window.onAppUpdateResult && onAppUpdateResult('error',null,null," +
+                        jsonStringify(reason) + ")");
+                }
+            });
+        }
+
+        /**
+         * APK 다운로드 + 설치 인텐트 실행
+         * 진행: window.onAppDownloadProgress(percent)
+         * 완료: window.onAppDownloadComplete() → 자동으로 설치 인텐트 실행
+         * 실패: window.onAppDownloadError(message)
+         */
+        @JavascriptInterface
+        public void downloadAndInstallApk(String apkUrl) {
+            // 알 수 없는 출처 허용 확인 (Android 8+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && !getPackageManager().canRequestPackageInstalls()) {
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this,
+                        "설정에서 '알 수 없는 출처 설치 허용'을 켜주세요",
+                        Toast.LENGTH_LONG).show();
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
+                });
+                jsCallback("window.onAppDownloadError && onAppDownloadError('설치 권한을 허용한 후 다시 시도해주세요')");
+                return;
+            }
+
+            appUpdateManager.downloadApk(apkUrl, new AppUpdateManager.DownloadCallback() {
+                @Override public void onProgress(int percent) {
+                    jsCallback("window.onAppDownloadProgress && onAppDownloadProgress(" + percent + ")");
+                }
+                @Override public void onDownloadComplete(java.io.File apkFile) {
+                    jsCallback("window.onAppDownloadComplete && onAppDownloadComplete()");
+                    runOnUiThread(() -> appUpdateManager.installApk(apkFile));
+                }
+                @Override public void onDownloadFailed(String reason) {
+                    jsCallback("window.onAppDownloadError && onAppDownloadError(" + jsonStringify(reason) + ")");
+                }
+            });
         }
     }
 

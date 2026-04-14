@@ -10,24 +10,41 @@ android {
         applicationId "com.sympotalk.launcher"
         minSdk 28          // Android 9 (LG G Pad 5)
         targetSdk 34
-        versionCode 6
-        versionName "1.0.10"
+        versionCode 7
+        versionName "1.0.11"
 
-        // BuildConfig에 Cloudflare URL 포함
+        // BuildConfig에 Cloudflare URL + GitHub 저장소 정보
         buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalklauncher-apk.pages.dev\""
+        buildConfigField "String", "GITHUB_REPO", "\"sympotalk/SympotalkLauncher-APK\""
+    }
+
+    // 공용 release keystore 로 서명 → 매번 동일 서명 → 삭제 없이 업데이트 가능
+    signingConfigs {
+        release {
+            def ksFile = file('release.keystore')
+            if (ksFile.exists()) {
+                storeFile ksFile
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: 'sympotalk-launcher-2026'
+                keyAlias System.getenv("KEY_ALIAS") ?: 'sympotalk'
+                keyPassword System.getenv("KEY_PASSWORD") ?: 'sympotalk-launcher-2026'
+            }
+        }
     }
 
     buildTypes {
         debug {
-            applicationIdSuffix ".debug"
-            versionNameSuffix "-debug"
             debuggable true
+            // Debug 도 release keystore 로 서명 (업데이트 일관성)
+            if (file('release.keystore').exists()) {
+                signingConfig signingConfigs.release
+            }
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // 릴리즈 서명: 아래 주석 해제 후 keystore 경로/비밀번호 설정
-            // signingConfig signingConfigs.release
+            if (file('release.keystore').exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 

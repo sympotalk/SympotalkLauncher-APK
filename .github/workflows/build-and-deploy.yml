@@ -1,9 +1,12 @@
-name: Build Android APK
+name: Build Android APK & Release
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write   # Release 생성/업데이트 권한
 
 jobs:
   build-apk:
@@ -19,23 +22,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # gradle/actions/setup-gradle 이 wrapper jar + Gradle 캐싱 자동 처리
       - name: Setup Gradle 8.6
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
           cache-read-only: false
 
-      # 웹 파일을 Android assets에 복사 (번들 기본 버전)
+      # 웹 파일을 Android assets 에 복사 (번들 기본 버전)
       - name: Copy web assets into Android project
         run: |
           ASSETS="android-app/app/src/main/assets/www"
           mkdir -p "$ASSETS"
           cp index.html manifest.json sw.js version.txt "$ASSETS/"
-          echo "Assets:"; ls -la "$ASSETS"
 
-      # gradle 명령어로 직접 빌드 (gradlew wrapper 불필요)
-      - name: Build debug APK
+      - name: Build APK
         run: gradle assembleDebug --no-daemon --project-dir android-app
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
@@ -44,31 +44,40 @@ jobs:
         run: |
           VERSION=$(cat version.txt | tr -d '[:space:]')
           mkdir -p dist
+          # 고정 파일명 (앱 내 업데이터가 이 URL 로 요청)
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk \
+             "dist/SympotalkLauncher.apk"
+          # 버전명 파일명 (아카이브용)
           cp android-app/app/build/outputs/apk/debug/app-debug.apk \
              "dist/SympotalkLauncher-v${VERSION}.apk"
-          echo "APK_PATH=dist/SympotalkLauncher-v${VERSION}.apk" >> $GITHUB_ENV
           echo "APK_VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: SympotalkLauncher-APK
-          path: ${{ env.APK_PATH }}
+          path: dist/*.apk
           retention-days: 30
 
-      - name: Create GitHub Release (태그 푸시 시)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # 모든 main 푸시에 대해 Release 생성/업데이트 (앱 내 업데이터가 참조)
+      - name: Create or Update GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.APK_PATH }}
-          name: "Sympotalk 런처 ${{ env.APK_VERSION }}"
+          tag_name: v${{ env.APK_VERSION }}
+          name: "Sympotalk 런처 v${{ env.APK_VERSION }}"
+          make_latest: "true"
           body: |
-            ## Sympotalk 런처 ${{ env.APK_VERSION }}
+            ## Sympotalk 런처 v${{ env.APK_VERSION }}
+
+            자동 빌드된 APK 입니다.
 
             ### 설치 방법
-            1. 태블릿: 설정 → 보안 → 알 수 없는 소스에서 앱 설치 허용
-            2. 아래 APK 다운로드 후 설치
-            3. 앱 실행 후 설정 탭에서 참석자/운영자 링크 주소 입력
+            - 기존 앱이 설치되어 있으면: APK 다운로드 → 탭 → "업데이트"
+            - 처음 설치: 설정 → 알 수 없는 출처 허용 → APK 탭 → 설치
+            - 앱 내에서: 설정 탭 → "앱 업데이트 확인" (v1.0.11+)
 
-            ### 업데이트 서버
-            https://sympotalklauncher-apk.pages.dev
+            **참고**: `SympotalkLauncher.apk` 는 항상 최신 버전입니다 (앱 내 업데이터 전용).
+          files: |
+            dist/SympotalkLauncher.apk
+            dist/SympotalkLauncher-v${{ env.APK_VERSION }}.apk
