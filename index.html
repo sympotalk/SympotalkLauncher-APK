@@ -297,6 +297,7 @@
     .icon-attendee  { background: rgba(34,197,94,0.15);  }
     .icon-console   { background: rgba(96,165,250,0.15); }
     .icon-chair     { background: rgba(251,191,36,0.15); }
+    .icon-speaker   { background: rgba(236,72,153,0.15); }
     .icon-moderator { background: rgba(168,85,247,0.15); }
     .link-btn-info { flex: 1; min-width: 0; }
     .link-btn-label { font-weight: 600; font-size: 14px; }
@@ -1111,7 +1112,7 @@ function openEventDetail(event) {
   if (warnEl) warnEl.style.display = 'none';
 
   supaFetch('rooms', {
-    'select': 'id,name,slug,chair_token,console_token,moderator_token',
+    'select': 'id,name,slug,chair_token,console_token,moderator_token,speaker_token',
     'event_id': 'eq.' + event.id,
     'order': 'sort_order.asc.nullslast'
   }).then(function(rooms) {
@@ -1125,45 +1126,54 @@ function renderDetailLinks(event, rooms) {
   var container = document.getElementById('detail-links-container');
   var html = '';
 
-  // ── 참석자 링크 ──
+  // ── 참석자 PADS 링크 (행사 단위, 룸 무관) ──
   html += '<div class="link-group">';
   html += '<div class="link-group-title">' +
     '<svg style="width:14px;height:14px;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
-    '참석자 링크' +
+    '참석자 (PADS)' +
   '</div>';
-
-  var attendeeUrl = BASE_URL + '/' + event.slug;
-  html += renderLinkBtn('icon-attendee', '👥', '참석자 입장', attendeeUrl, event.slug, attendeeUrl);
+  var attendeeUrl = BASE_URL + '/pads/' + event.slug;
+  html += renderLinkBtn('icon-attendee', '📱', '참석자 태블릿 PADS', attendeeUrl, '/pads/' + event.slug, attendeeUrl);
   html += '</div>';
 
   // ── 운영자 링크 (룸별) ──
   if (rooms && rooms.length > 0) {
     for (var i = 0; i < rooms.length; i++) {
       var room = rooms[i];
+      var roomId = room.id;
+      var slug = event.slug;
       html += '<div class="link-group">';
       html += '<div class="room-title">🚪 ' + escHtml(room.name || ('룸 ' + (i + 1))) + '</div>';
 
+      // 콘솔패드
       if (room.console_token) {
-        var consoleUrl = BASE_URL + '/console/' + room.console_token;
-        html += renderLinkBtn('icon-console', '🖥️', '콘솔 (운영자)', consoleUrl, room.console_token, consoleUrl);
+        var consoleUrl = BASE_URL + '/consolepad/' + slug + '/' + roomId + '?t=' + room.console_token;
+        html += renderLinkBtn('icon-console', '🖥️', '콘솔패드', consoleUrl,
+          '/consolepad/' + slug + '/' + roomId.substring(0, 8) + '…', consoleUrl);
       }
+      // 좌장패드
       if (room.chair_token) {
-        var chairUrl = BASE_URL + '/chair/' + room.chair_token;
-        html += renderLinkBtn('icon-chair', '🎤', '의장 패드', chairUrl, room.chair_token, chairUrl);
+        var chairUrl = BASE_URL + '/chair/' + slug + '/' + roomId + '?t=' + room.chair_token;
+        html += renderLinkBtn('icon-chair', '🎤', '좌장패드', chairUrl,
+          '/chair/' + slug + '/' + roomId.substring(0, 8) + '…', chairUrl);
       }
+      // 연자패드
+      if (room.speaker_token) {
+        var speakerUrl = BASE_URL + '/speaker/' + slug + '/' + roomId + '?t=' + room.speaker_token;
+        html += renderLinkBtn('icon-speaker', '👨‍🏫', '연자패드', speakerUrl,
+          '/speaker/' + slug + '/' + roomId.substring(0, 8) + '…', speakerUrl);
+      }
+      // 사회자패드 (전달용 - 좌장전달모드 ON 시에만 작동)
       if (room.moderator_token) {
-        var moderatorUrl = BASE_URL + '/moderator/' + room.moderator_token;
-        html += renderLinkBtn('icon-moderator', '📋', '진행자 패드', moderatorUrl, room.moderator_token, moderatorUrl);
+        var moderatorUrl = BASE_URL + '/moderator/' + slug + '/' + roomId + '?t=' + room.moderator_token;
+        html += renderLinkBtn('icon-moderator', '📋', '사회자패드 (전달용)', moderatorUrl,
+          '/moderator/' + slug + '/' + roomId.substring(0, 8) + '…', moderatorUrl);
       }
       html += '</div>';
     }
   } else {
-    // 룸 없음: 이벤트 슬러그만으로 기본 운영자 링크
-    html += '<div class="link-group">';
-    html += '<div class="link-group-title">🖥️ 운영자 링크</div>';
-    var opUrl = BASE_URL + '/' + event.slug;
-    html += renderLinkBtn('icon-console', '🖥️', '운영자 입장', opUrl, event.slug, opUrl);
-    html += '</div>';
+    html += '<div style="padding:12px;color:#64748b;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155;margin-top:8px">' +
+      '등록된 룸이 없습니다</div>';
   }
 
   container.innerHTML = html;
