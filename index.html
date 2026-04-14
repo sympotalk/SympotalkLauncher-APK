@@ -765,7 +765,7 @@
             </div>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="settings-input" id="input-default-wifi-pw" type="password"
-                placeholder="예) a01044447995" autocomplete="off" autocorrect="off" spellcheck="false"
+                placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
                 style="flex:1">
               <button class="btn-save" style="width:auto;padding:10px 14px;margin:0"
                 onclick="saveDefaultWifiPassword()">저장</button>
@@ -963,22 +963,29 @@ var state = {
 var pendingWifi = null;      // {ssid, security} 비밀번호 입력 대기 중인 네트워크
 var wifiRefreshTimer = null;
 
-/* ── 자주 쓰는 WiFi 비밀번호 (localStorage) ──
+/* ── 자주 쓰는 WiFi 비밀번호 (localStorage + 하드코딩 기본값) ──
  * NOTE: 키오스크 전용 단말 기준 평문 저장. 공용/분실 위험 단말에는 사용 금지.
+ * 기본값은 앱 재설치·업데이트·localStorage 초기화 후에도 유지됨.
  */
+var DEFAULT_WIFI_PASSWORD = 'a01044447995';   // 회사 기본 WiFi 비밀번호
+
 function getDefaultWifiPassword() {
-  try { return localStorage.getItem('default_wifi_pw') || ''; } catch(e) { return ''; }
+  try {
+    var saved = localStorage.getItem('default_wifi_pw');
+    // localStorage 에 저장된 값이 있으면 그걸, 없으면 하드코딩 기본값
+    return (saved !== null && saved !== '') ? saved : DEFAULT_WIFI_PASSWORD;
+  } catch(e) { return DEFAULT_WIFI_PASSWORD; }
 }
 function saveDefaultWifiPassword() {
   var pw = document.getElementById('input-default-wifi-pw').value;
-  if (pw === '') {
+  if (pw === '' || pw === DEFAULT_WIFI_PASSWORD) {
+    // 빈 값 또는 기본값과 같으면 localStorage 비움 → 항상 하드코딩 기본값 사용
     localStorage.removeItem('default_wifi_pw');
-    showToast('저장된 비밀번호가 삭제되었습니다');
+    showToast('기본 비밀번호로 복원되었습니다');
   } else {
     localStorage.setItem('default_wifi_pw', pw);
     showToast('자주 쓰는 비밀번호가 저장되었습니다');
   }
-  // UI 갱신: 스캔 목록이 이미 표시 중이면 원탭 버튼 노출
   refreshWifiListUIFromCache();
 }
 function toggleDefaultPwVisible() {
@@ -1005,17 +1012,44 @@ function updateCurrentWifi() {
     el.style.color = '#64748b';
     return;
   }
-  // APK지만 WiFi 메서드가 없음 → 구버전 APK
   if (typeof AndroidBridge.getCurrentSSID !== 'function') {
     el.innerHTML = '⚠️ 이전 버전 APK<br><span style="font-size:11px;color:#fbbf24;font-weight:400">WiFi 스캔이 추가된 새 APK 설치 필요 (v1.0.7+)</span>';
     el.style.color = '#fbbf24';
     return;
   }
-  // 최신 APK
+
   var ssid = '';
   try { ssid = AndroidBridge.getCurrentSSID(); } catch(e) {}
-  el.textContent = ssid ? '✅ ' + ssid : '(연결된 WiFi 없음)';
-  el.style.color = ssid ? '#22c55e' : '#64748b';
+
+  // SSID 가 비었으면 위치 권한/서비스 체크 (Android 8.1+ 필수)
+  if (!ssid) {
+    var hasLoc = true;
+    try {
+      if (typeof AndroidBridge.hasLocationPermission === 'function') {
+        hasLoc = AndroidBridge.hasLocationPermission();
+      }
+    } catch(e) {}
+    if (!hasLoc) {
+      el.innerHTML = '⚠️ WiFi 이름을 보려면 <strong>위치 권한</strong>이 필요합니다<br>' +
+        '<button class="btn-save" style="margin-top:6px;padding:6px 12px;width:auto;font-size:12px;background:#60a5fa" ' +
+        'onclick="requestLocationPermission()">권한 허용</button>';
+      el.style.color = '#fbbf24';
+    } else {
+      el.innerHTML = '(연결된 WiFi 없음)<br><span style="font-size:11px;color:#94a3b8;font-weight:400">' +
+        'WiFi 연결 후에도 이름이 안 보이면 위치 서비스가 꺼져 있는지 확인하세요</span>';
+      el.style.color = '#64748b';
+    }
+    return;
+  }
+
+  el.textContent = '✅ ' + ssid;
+  el.style.color = '#22c55e';
+}
+
+function requestLocationPermission() {
+  if (hasNativeBridge && typeof AndroidBridge.requestLocationPermission === 'function') {
+    try { AndroidBridge.requestLocationPermission(); } catch(e) {}
+  }
 }
 
 function refreshWifiList() {

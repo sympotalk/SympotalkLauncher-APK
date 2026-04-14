@@ -28,6 +28,7 @@ public class MainActivity extends AppCompatActivity {
     private AppUpdateManager appUpdateManager;
     private static final int REQ_CAMERA = 1001;
     private static final int REQ_LOCATION = 1002;
+    private static final int REQ_STARTUP = 1003;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,8 +62,29 @@ public class MainActivity extends AppCompatActivity {
         wifiHelper = new WifiHelper(this);
         appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
         setupWebView();
-        checkCameraPermission();
+        checkStartupPermissions();     // 카메라 + 위치 권한 동시 요청
         checkForUpdates();
+    }
+
+    /**
+     * 앱 시작 시 필수 권한 일괄 요청
+     * - CAMERA: QR 스캐너
+     * - ACCESS_FINE_LOCATION: WiFi 스캔 + WiFiInfo.getSSID (Android 8.1+ 필수)
+     */
+    private void checkStartupPermissions() {
+        java.util.List<String> toRequest = new java.util.ArrayList<>();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            toRequest.add(Manifest.permission.CAMERA);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            toRequest.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (!toRequest.isEmpty()) {
+            ActivityCompat.requestPermissions(this,
+                toRequest.toArray(new String[0]), REQ_STARTUP);
+        }
     }
 
     private void setupWebView() {
@@ -204,17 +226,13 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void checkCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
-        }
-    }
+    // checkCameraPermission 은 checkStartupPermissions 로 통합됨
 
     @Override
     public void onRequestPermissionsResult(int code, @NonNull String[] perms, @NonNull int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+
+        // 카메라 권한 — WebView 카메라 요청 응답용
         if (code == REQ_CAMERA && pendingPermission != null) {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
                 pendingPermission.grant(pendingPermission.getResources());
@@ -224,11 +242,22 @@ public class MainActivity extends AppCompatActivity {
             pendingPermission = null;
             return;
         }
-        if (code == REQ_LOCATION) {
-            // 위치 권한 허용 시 WiFi 스캔 자동 재시도
-            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-                jsCallback("window.refreshWifiList && refreshWifiList()");
-            } else {
+
+        // 위치 권한 — WiFi SSID 조회 + 스캔 재시도 + 현재 WiFi 상태 갱신
+        if (code == REQ_LOCATION || code == REQ_STARTUP) {
+            boolean locationGranted = false;
+            for (int i = 0; i < perms.length && i < results.length; i++) {
+                if (Manifest.permission.ACCESS_FINE_LOCATION.equals(perms[i])
+                        && results[i] == PackageManager.PERMISSION_GRANTED) {
+                    locationGranted = true;
+                    break;
+                }
+            }
+            if (locationGranted) {
+                // 위치 권한 허용 → 현재 WiFi 표시 + 스캔 목록 갱신
+                jsCallback("window.updateCurrentWifi && updateCurrentWifi();"
+                    + "window.refreshWifiListUIFromCache && refreshWifiListUIFromCache();");
+            } else if (code == REQ_LOCATION) {
                 jsCallback("window.onWifiScanError && onWifiScanError('위치 권한이 거부되었습니다')");
             }
         }
@@ -338,6 +367,20 @@ public class MainActivity extends AppCompatActivity {
         public String getCurrentSSID() {
             String s = wifiHelper == null ? null : wifiHelper.getCurrentSSID();
             return s == null ? "" : s;
+        }
+
+        /** 위치 권한 보유 여부 (WiFi SSID 조회 + 스캔 필수) */
+        @JavascriptInterface
+        public boolean hasLocationPermission() {
+            return ContextCompat.checkSelfPermission(MainActivity.this,
+                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        /** JS 에서 위치 권한 요청 */
+        @JavascriptInterface
+        public void requestLocationPermission() {
+            runOnUiThread(() -> ActivityCompat.requestPermissions(MainActivity.this,
+                new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION));
         }
 
         /**
