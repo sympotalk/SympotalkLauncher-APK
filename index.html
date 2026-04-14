@@ -1171,8 +1171,8 @@ function renderWifiList(networks) {
       signalIcon += '<span style="display:inline-block;width:3px;height:' + ((b+1)*3) + 'px;background:' + (b < bars ? '#60a5fa' : '#334155') + ';margin-right:1px;vertical-align:bottom;border-radius:1px"></span>';
     }
 
-    // HTML 속성 내 JSON 인라인: " 와 ' 모두 이스케이프 (SSID 에 ' 포함 방어)
-    var netJson = JSON.stringify(n).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    // HTML 속성 내 JSON 인라인 — escAttr 이 &/"/' 모두 처리
+    var netJson = escAttr(n);
     // 네트워크 행 (탭 시 비밀번호 모달)
     html += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
       '<button class="link-btn" style="flex:1;margin:0" onclick="selectWifi(' + netJson + ')">' +
@@ -1543,8 +1543,7 @@ function renderEventList(events) {
     var statusInfo = getEventStatusInfo(ev);
     var dateStr = formatDateRange(ev.start_date, ev.end_date);
     var updatedStr = formatRelativeTime(ev.updated_at);
-    html += '<div class="event-card" onclick="openEventDetail(' +
-      JSON.stringify(ev).replace(/"/g, '&quot;').replace(/'/g, '&#39;') + ')">' +
+    html += '<div class="event-card" onclick="openEventDetail(' + escAttr(ev) + ')">' +
       '<div class="event-info">' +
         '<div class="event-name">' + escHtml(ev.name) + '</div>' +
         '<div class="event-meta">' +
@@ -2063,16 +2062,19 @@ function runSpeedTest() {
   btn.disabled = true;
   resultEl.innerHTML = '다운로드 중...';
 
-  var sizeBytes = 10 * 1000 * 1000;   // 10MB
+  var hasStream = !!(window.ReadableStream && Response.prototype.body);
+  // 구형 WebView 폴백: 메모리 부담 축소 (10MB → 2MB)
+  var sizeBytes = hasStream ? 10 * 1000 * 1000 : 2 * 1000 * 1000;
   var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes;
   var start = performance.now();
   var progressBytes = 0;
+  var lastUiUpdate = 0;   // throttle: 100ms 또는 10% 단위 이상 변경 시만 UI 갱신
 
   fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors' })
     .then(function(res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       if (!res.body || !res.body.getReader) {
-        // 일부 구형 WebView 는 ReadableStream 미지원 → 전체 blob 받기 (진행률 X)
+        // 구형 WebView: blob 전체 적재 (2MB)
         return res.blob().then(function(blob) {
           progressBytes = blob.size;
           return progressBytes;
@@ -2083,10 +2085,14 @@ function runSpeedTest() {
         return reader.read().then(function(chunk) {
           if (chunk.done) return progressBytes;
           progressBytes += chunk.value.length;
-          // 진행률 표시
-          var pct = Math.min(100, Math.round(progressBytes / sizeBytes * 100));
-          resultEl.innerHTML = '다운로드 중... ' + pct + '% (' +
-            (progressBytes / 1000000).toFixed(1) + ' / ' + (sizeBytes/1000000).toFixed(0) + ' MB)';
+          // UI throttle: 마지막 갱신 후 100ms 경과했을 때만 innerHTML 업데이트
+          var now = performance.now();
+          if (now - lastUiUpdate > 100) {
+            lastUiUpdate = now;
+            var pct = Math.min(100, Math.round(progressBytes / sizeBytes * 100));
+            resultEl.innerHTML = '다운로드 중... ' + pct + '% (' +
+              (progressBytes / 1000000).toFixed(1) + ' / ' + (sizeBytes/1000000).toFixed(0) + ' MB)';
+          }
           return pump();
         });
       }
@@ -2355,6 +2361,15 @@ function escHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// HTML 속성 내에 JSON 인라인할 때 사용 (onclick="fn(payload)")
+// &/"/' 모두 엔티티화 — 이름에 &, ' 포함돼도 파싱 안전
+function escAttr(obj) {
+  return JSON.stringify(obj)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function copyText(elementId, btn) {

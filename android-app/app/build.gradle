@@ -10,8 +10,8 @@ android {
         applicationId "com.sympotalk.launcher"
         minSdk 28          // Android 9 (LG G Pad 5)
         targetSdk 34
-        versionCode 19
-        versionName "1.0.23"
+        versionCode 20
+        versionName "1.0.24"
 
         // BuildConfig에 Cloudflare URL + GitHub 저장소 정보
         buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalklauncher-apk.pages.dev\""
