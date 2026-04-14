@@ -876,23 +876,35 @@ function openWifiSettings() {
 function updateCurrentWifi() {
   var el = document.getElementById('current-wifi');
   if (!el) return;
-  if (hasNativeBridge && typeof AndroidBridge.getCurrentSSID === 'function') {
-    var ssid = '';
-    try { ssid = AndroidBridge.getCurrentSSID(); } catch(e) {}
-    el.textContent = ssid ? '✅ ' + ssid : '(연결된 WiFi 없음)';
-    el.style.color = ssid ? '#22c55e' : '#64748b';
-  } else {
-    el.textContent = '(웹 브라우저 환경)';
+
+  if (!hasNativeBridge) {
+    el.innerHTML = '🌐 웹 브라우저 환경<br><span style="font-size:11px;color:#94a3b8;font-weight:400">WiFi 스캔은 APK 설치 후 사용 가능</span>';
     el.style.color = '#64748b';
+    return;
   }
+  // APK지만 WiFi 메서드가 없음 → 구버전 APK
+  if (typeof AndroidBridge.getCurrentSSID !== 'function') {
+    el.innerHTML = '⚠️ 이전 버전 APK<br><span style="font-size:11px;color:#fbbf24;font-weight:400">WiFi 스캔이 추가된 새 APK 설치 필요 (v1.0.7+)</span>';
+    el.style.color = '#fbbf24';
+    return;
+  }
+  // 최신 APK
+  var ssid = '';
+  try { ssid = AndroidBridge.getCurrentSSID(); } catch(e) {}
+  el.textContent = ssid ? '✅ ' + ssid : '(연결된 WiFi 없음)';
+  el.style.color = ssid ? '#22c55e' : '#64748b';
 }
 
 function refreshWifiList() {
   var statusEl = document.getElementById('wifi-scan-status');
   var listEl = document.getElementById('wifi-list');
 
-  if (!hasNativeBridge || typeof AndroidBridge.startWifiScan !== 'function') {
-    statusEl.textContent = 'APK 환경에서만 사용 가능합니다';
+  if (!hasNativeBridge) {
+    statusEl.innerHTML = '⚠️ 웹 브라우저에서는 WiFi 스캔 불가. <strong>APK 설치 필요</strong>';
+    return;
+  }
+  if (typeof AndroidBridge.startWifiScan !== 'function') {
+    statusEl.innerHTML = '⚠️ 이전 APK 버전입니다. <strong>GitHub Actions에서 v1.0.7+ APK 다운로드 후 재설치</strong>';
     return;
   }
 
