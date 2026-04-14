@@ -467,6 +467,26 @@ public class MainActivity extends AppCompatActivity {
         public String getAppVersion() { return BuildConfig.VERSION_NAME; }
 
         /**
+         * 앱 삭제 인텐트 (서명 불일치로 업데이트 실패 시 사용).
+         * 시스템이 "이 앱을 제거하시겠습니까?" 확인 다이얼로그를 표시.
+         */
+        @JavascriptInterface
+        public void uninstallSelf() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_DELETE,
+                        Uri.parse("package:" + getPackageName()));
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this,
+                        "삭제 화면을 열 수 없습니다: " + e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        /**
          * GitHub Releases 에서 최신 APK 확인.
          * 결과: window.onAppUpdateResult(status, latestVersion, apkUrl, notes)
          *   status: "available" | "uptodate" | "error"
