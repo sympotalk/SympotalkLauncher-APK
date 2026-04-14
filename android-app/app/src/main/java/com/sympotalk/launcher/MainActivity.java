@@ -373,17 +373,18 @@ public class MainActivity extends AppCompatActivity {
 
         /**
          * WiFi 네트워크 연결. 결과는 window.onWifiConnectResult(success, message) 로 콜백
+         * (일부 Android 기기는 WifiManager 호출에 main looper 를 요구할 수 있어 UI 스레드 래핑)
          */
         @JavascriptInterface
-        public void connectWifi(String ssid, String password, String security) {
-            wifiHelper.connectToNetwork(ssid, password, security,
+        public void connectWifi(final String ssid, final String password, final String security) {
+            runOnUiThread(() -> wifiHelper.connectToNetwork(ssid, password, security,
                 new WifiHelper.ConnectCallback() {
                     @Override
                     public void onConnectResult(boolean success, String message) {
                         jsCallback("window.onWifiConnectResult && onWifiConnectResult(" +
                             success + "," + jsonStringify(message) + ")");
                     }
-                });
+                }));
         }
 
         // ══════════════════════ APK 자동 업데이트 ══════════════════════
