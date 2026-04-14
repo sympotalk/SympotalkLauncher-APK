@@ -1172,8 +1172,14 @@ function renderDetailLinks(event, rooms) {
       html += '</div>';
     }
   } else {
-    html += '<div style="padding:12px;color:#64748b;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155;margin-top:8px">' +
-      '등록된 룸이 없습니다</div>';
+    html += '<div class="link-group">' +
+      '<div class="link-group-title">🖥️ 운영자 링크</div>' +
+      '<div style="padding:14px 16px;color:#94a3b8;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155;line-height:1.6">' +
+        '<strong style="color:#fbbf24">⚠️ 등록된 룸이 없습니다</strong><br>' +
+        '이 행사는 아직 룸(세션장)이 등록되지 않아 콘솔·좌장·연자·사회자 패드 링크를 생성할 수 없습니다.<br>' +
+        '<span style="color:#64748b">sympotalk 관리자 페이지에서 룸을 먼저 추가해주세요.</span>' +
+      '</div>' +
+    '</div>';
   }
 
   container.innerHTML = html;
@@ -1194,54 +1200,25 @@ function renderLinkBtn(iconCls, icon, label, subText, shortText, url) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   BROWSER
+   LINK NAVIGATION (iframe 샌드박스 이슈 회피 — 직접 네비게이션)
 ═══════════════════════════════════════════════════════ */
 function openLink(encodedUrl) {
   var url = decodeURIComponent(encodedUrl);
-  state.browserUrl = url;
-  document.getElementById('browser-url').textContent = url;
-  document.getElementById('topbar-title').textContent = url;
-
-  var frame = document.getElementById('browser-frame');
-  var errorEl = document.getElementById('browser-error');
-
-  frame.style.display = 'block';
-  errorEl.classList.remove('show');
-
-  showView('browser');
-
-  // iframe 로드 시도
-  frame.onload = function() {
-    try {
-      var frameDoc = frame.contentDocument || frame.contentWindow.document;
-      if (!frameDoc || !frameDoc.body) throw new Error('empty');
-      errorEl.classList.remove('show');
-    } catch(e) {
-      // cross-origin: 정상적으로 로드된 것으로 간주
+  // 세션에 복귀용 상태 저장 (뒤로가기 시 마지막 행사로 돌아가기 위함)
+  try {
+    if (state.currentEvent) {
+      sessionStorage.setItem('last_event', JSON.stringify(state.currentEvent));
     }
-  };
-  frame.onerror = function() {
-    frame.style.display = 'none';
-    errorEl.classList.add('show');
-  };
-
-  frame.src = url;
+  } catch(e) {}
+  // WebView/브라우저를 직접 URL로 이동 (쿼리스트링 포함 완전 전송)
+  // 뒤로가기: Android back 버튼 → webView.goBack() → 런처 HTML 복귀
+  window.location.href = url;
 }
 
-function closeBrowserFrame() {
-  var frame = document.getElementById('browser-frame');
-  frame.src = 'about:blank';
-}
-
-function closeBrowser() {
-  closeBrowserFrame();
-  showView(state.prevView || 'detail');
-}
-
+function closeBrowserFrame() { /* deprecated — iframe 제거됨 */ }
+function closeBrowser() { showView('home'); }
 function openExternal() {
-  if (state.browserUrl) {
-    window.open(state.browserUrl, '_blank');
-  }
+  if (state.browserUrl) window.open(state.browserUrl, '_blank');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1511,6 +1488,16 @@ document.addEventListener('DOMContentLoaded', function() {
   // 실행 환경 표시 (APK vs 웹)
   var envEl = document.getElementById('app-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
+
+  // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원
+  try {
+    var lastEventStr = sessionStorage.getItem('last_event');
+    if (lastEventStr) {
+      var lastEvent = JSON.parse(lastEventStr);
+      sessionStorage.removeItem('last_event');
+      setTimeout(function() { openEventDetail(lastEvent); }, 300);
+    }
+  } catch(e) {}
 
   // 첫 사용자 인터랙션 시 NoSleep 활성화
   document.addEventListener('touchstart', function onFirstTouch() {
