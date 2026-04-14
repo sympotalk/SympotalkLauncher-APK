@@ -86,9 +86,8 @@ public class MainActivity extends AppCompatActivity {
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
 
-        // 오프라인 캐시
+        // 오프라인 캐시 (setAppCacheEnabled는 API 33부터 제거됨. HTTP 캐시가 자동 사용됨)
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setAppCacheEnabled(true);
 
         // 앱 식별 UA 추가
         s.setUserAgentString(s.getUserAgentString() + " SympotalkLauncher/1.0");
