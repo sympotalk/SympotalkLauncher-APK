@@ -805,15 +805,42 @@
 
         <div class="settings-group">
           <div class="settings-group-title">네트워크 진단</div>
+
+          <!-- 연결 테스트 -->
           <div class="settings-item">
             <div class="settings-label">인터넷 연결 테스트</div>
             <div class="settings-desc">
-              Supabase · GitHub · Cloudflare 에 접속 가능한지 확인합니다.
+              주요 서비스(Supabase · 프록시 · GitHub) 접속 가능 여부를 확인합니다.
             </div>
             <button class="btn-save" onclick="runNetworkDiagnostic()" id="btn-net-diag">
               🌐 연결 테스트 실행
             </button>
             <div id="net-diag-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
+          </div>
+
+          <!-- Ping 테스트 -->
+          <div class="settings-item">
+            <div class="settings-label">Ping 테스트 (지연 시간)</div>
+            <div class="settings-desc">
+              프록시 서버까지 왕복 시간을 5회 측정해 min/avg/max 를 표시합니다.
+            </div>
+            <button class="btn-save" onclick="runPingTest()" id="btn-ping">
+              📡 Ping 측정 (5회)
+            </button>
+            <div id="ping-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
+          </div>
+
+          <!-- Speed Test -->
+          <div class="settings-item">
+            <div class="settings-label">인터넷 속도 측정</div>
+            <div class="settings-desc">
+              Cloudflare 에서 10MB 다운로드 후 실효 속도(Mbps)를 계산합니다.
+              행사장 공유기 품질 확인용.
+            </div>
+            <button class="btn-save" onclick="runSpeedTest()" id="btn-speed">
+              ⚡ 속도 측정 (10MB 다운로드)
+            </button>
+            <div id="speed-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
           </div>
         </div>
 
@@ -1372,6 +1399,24 @@ function supaFetch(path, params) {
 }
 
 /**
+ * Supabase RPC 호출 (POST /rest/v1/rpc/{fn_name})
+ * 담당자 이름 조회처럼 RLS 우회 필요한 공개 함수에 사용
+ */
+function supaRpc(fnName, payload) {
+  return fetch(SUPABASE_URL + '/rest/v1/rpc/' + fnName, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload || {})
+  }).then(function(r) { return r.json(); });
+}
+
+/**
  * Cloudflare 프록시를 먼저 시도하고 실패하면 Supabase 직접 호출 (fallback)
  * — 300~500대 동시 접속 시 Supabase 부하 제거. 엣지 캐시 15초.
  */
@@ -1404,13 +1449,10 @@ function loadEvents() {
   spinner.style.display = 'inline-block';
   container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
 
-  // 프록시 먼저 시도 → 실패 시 Supabase 직접 (fallback)
+  // 프록시 먼저 시도 → 실패 시 Supabase RPC 직접 (fallback)
+  // RPC 는 담당자 이름(display_name) 까지 포함해서 반환
   proxyFetch('/api/events', function() {
-    return supaFetch('events', {
-      'select': 'id,name,slug,status,start_date,end_date,agency',
-      'status': 'in.(active,draft)',
-      'order': 'start_date.asc.nullslast'
-    });
+    return supaRpc('pad_get_active_events');
   }).then(function(events) {
     spinner.style.display = 'none';
     renderEventList(events);
@@ -1500,14 +1542,17 @@ function renderEventList(events) {
     var ev = events[i];
     var statusInfo = getEventStatusInfo(ev);
     var dateStr = formatDateRange(ev.start_date, ev.end_date);
-    if (i > 0) html += '';
-    html += '<div class="event-card" onclick="openEventDetail(' + JSON.stringify(ev).replace(/"/g, '&quot;') + ')">' +
+    var updatedStr = formatRelativeTime(ev.updated_at);
+    html += '<div class="event-card" onclick="openEventDetail(' +
+      JSON.stringify(ev).replace(/"/g, '&quot;').replace(/'/g, '&#39;') + ')">' +
       '<div class="event-info">' +
         '<div class="event-name">' + escHtml(ev.name) + '</div>' +
         '<div class="event-meta">' +
-          '<span>' + dateStr + '</span>' +
-          (ev.agency ? '<span class="event-agency">' + escHtml(ev.agency) + '</span>' : '') +
+          '<span>📅 ' + dateStr + '</span>' +
+          (ev.agency ? '<span class="event-agency">🏢 ' + escHtml(ev.agency) + '</span>' : '') +
+          (ev.manager_name ? '<span class="event-agency">👤 ' + escHtml(ev.manager_name) + '</span>' : '') +
         '</div>' +
+        (updatedStr ? '<div class="event-meta" style="margin-top:2px"><span style="color:#475569;font-size:11px">🕐 수정 ' + updatedStr + '</span></div>' : '') +
       '</div>' +
       '<span class="status-badge ' + statusInfo.cls + '">' + statusInfo.label + '</span>' +
       '<span class="event-arrow">›</span>' +
@@ -1515,6 +1560,22 @@ function renderEventList(events) {
   }
   html += '</div>';
   container.innerHTML = html;
+}
+
+// 상대 시간 표시 ("방금 전", "3시간 전", "어제", "2일 전", "2026-04-01")
+function formatRelativeTime(iso) {
+  if (!iso) return '';
+  var t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  var diffSec = (Date.now() - t) / 1000;
+  if (diffSec < 60) return '방금 전';
+  if (diffSec < 3600) return Math.floor(diffSec / 60) + '분 전';
+  if (diffSec < 86400) return Math.floor(diffSec / 3600) + '시간 전';
+  if (diffSec < 86400 * 2) return '어제';
+  if (diffSec < 86400 * 7) return Math.floor(diffSec / 86400) + '일 전';
+  // 7일 이상은 절대 날짜
+  var d = new Date(iso);
+  return d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0');
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1925,6 +1986,134 @@ function runNetworkDiagnostic() {
         if (completed === targets.length) btnEl.disabled = false;
       });
   });
+}
+
+/* ═══════════════════════════════════════════════════════
+   PING TEST (HTTP latency 기반 - 5회 샘플)
+═══════════════════════════════════════════════════════ */
+function runPingTest() {
+  var btn = document.getElementById('btn-ping');
+  var resultEl = document.getElementById('ping-result');
+  btn.disabled = true;
+  resultEl.innerHTML = '측정 중... (5회)';
+
+  var targetUrl = PROXY_URL + '/api/health';   // 프록시 헬스체크 엔드포인트
+  var samples = 5;
+  var interval = 250;   // ms between samples
+  var times = [];
+  var fails = 0;
+  var i = 0;
+
+  function tick() {
+    if (i >= samples) {
+      finish();
+      return;
+    }
+    var start = performance.now();
+    fetch(targetUrl + '?_=' + Date.now(), {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' }
+    }).then(function(r) {
+      if (r.ok) {
+        times.push(performance.now() - start);
+      } else {
+        fails++;
+      }
+    }).catch(function() {
+      fails++;
+    }).finally(function() {
+      i++;
+      resultEl.innerHTML = '측정 중... (' + i + '/' + samples + ')';
+      setTimeout(tick, interval);
+    });
+  }
+
+  function finish() {
+    btn.disabled = false;
+    if (times.length === 0) {
+      resultEl.innerHTML = '<div style="color:#ef4444">❌ 모든 요청 실패 — WiFi/인터넷 확인 필요</div>';
+      return;
+    }
+    var min = Math.min.apply(null, times);
+    var max = Math.max.apply(null, times);
+    var avg = times.reduce(function(a,b){return a+b;}, 0) / times.length;
+    var lossPct = Math.round(fails / samples * 100);
+    var quality = avg < 50 ? '🟢 매우 좋음'
+                : avg < 150 ? '🟢 양호'
+                : avg < 300 ? '🟡 보통'
+                : '🔴 느림';
+    resultEl.innerHTML =
+      '<div><strong>대상:</strong> ' + PROXY_URL + '/api/health</div>' +
+      '<div><strong>샘플:</strong> ' + times.length + '/' + samples + ' 성공' +
+        (lossPct > 0 ? ' (손실 ' + lossPct + '%)' : '') + '</div>' +
+      '<div><strong>지연:</strong> min ' + min.toFixed(0) + 'ms · avg ' + avg.toFixed(0) + 'ms · max ' + max.toFixed(0) + 'ms</div>' +
+      '<div style="margin-top:4px">' + quality + '</div>';
+  }
+
+  tick();
+}
+
+/* ═══════════════════════════════════════════════════════
+   SPEED TEST (Cloudflare __down 엔드포인트 - 실효 다운로드 속도)
+═══════════════════════════════════════════════════════ */
+function runSpeedTest() {
+  var btn = document.getElementById('btn-speed');
+  var resultEl = document.getElementById('speed-result');
+  btn.disabled = true;
+  resultEl.innerHTML = '다운로드 중...';
+
+  var sizeBytes = 10 * 1000 * 1000;   // 10MB
+  var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes;
+  var start = performance.now();
+  var progressBytes = 0;
+
+  fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors' })
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.body || !res.body.getReader) {
+        // 일부 구형 WebView 는 ReadableStream 미지원 → 전체 blob 받기 (진행률 X)
+        return res.blob().then(function(blob) {
+          progressBytes = blob.size;
+          return progressBytes;
+        });
+      }
+      var reader = res.body.getReader();
+      function pump() {
+        return reader.read().then(function(chunk) {
+          if (chunk.done) return progressBytes;
+          progressBytes += chunk.value.length;
+          // 진행률 표시
+          var pct = Math.min(100, Math.round(progressBytes / sizeBytes * 100));
+          resultEl.innerHTML = '다운로드 중... ' + pct + '% (' +
+            (progressBytes / 1000000).toFixed(1) + ' / ' + (sizeBytes/1000000).toFixed(0) + ' MB)';
+          return pump();
+        });
+      }
+      return pump();
+    })
+    .then(function(bytes) {
+      var elapsed = (performance.now() - start) / 1000;   // seconds
+      if (elapsed < 0.01 || !bytes) {
+        resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 불가</div>';
+        return;
+      }
+      var mbps = (bytes * 8 / elapsed / 1000000);
+      var quality = mbps >= 50 ? '🟢 매우 빠름'
+                  : mbps >= 20 ? '🟢 양호 (HD 스트리밍 가능)'
+                  : mbps >= 5  ? '🟡 보통 (기본 업무 가능)'
+                  : '🔴 느림 (공유기 점검 필요)';
+      resultEl.innerHTML =
+        '<div><strong>속도:</strong> <span style="font-size:18px;color:#60a5fa;font-weight:700">' + mbps.toFixed(2) + ' Mbps</span></div>' +
+        '<div><strong>다운로드:</strong> ' + (bytes/1000000).toFixed(1) + ' MB / ' + elapsed.toFixed(1) + '초</div>' +
+        '<div style="margin-top:4px">' + quality + '</div>';
+    })
+    .catch(function(err) {
+      resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 실패: ' + escHtml(err.message) + '</div>';
+    })
+    .finally(function() {
+      btn.disabled = false;
+    });
 }
 
 /* ═══════════════════════════════════════════════════════
