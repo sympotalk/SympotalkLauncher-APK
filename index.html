@@ -2269,14 +2269,15 @@ function checkInstallOutcome() {
     return;
   }
 
-  // 아직 업데이트 안 됨 → 취소 또는 실패. 2분 가드로 구분.
+  // 아직 업데이트 안 됨 → 취소 또는 실패.
   //   - ts 가 없으면(레거시 상태) 즉시 플래그 정리 (데드락 방지)
-  //   - 2분 이상 경과 시: "완료되지 않음" UI 표시
+  //   - 10초 이상 경과 시: "완료되지 않음" UI 즉시 표시
+  //     (사용자가 "설치할 수 없습니다" 메시지 보고 바로 돌아오는 경우 대응)
   if (!ts) {
     clearInstallExpectation();
     return;
   }
-  if ((Date.now() - ts) > 120000) {
+  if ((Date.now() - ts) > 10000) {
     var panelEl = document.getElementById('app-install-failed');
     if (panelEl) panelEl.style.display = 'block';
     var availEl = document.getElementById('app-update-available');
