@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.*;
@@ -91,6 +92,9 @@ public class MainActivity extends AppCompatActivity {
 
         // 앱 식별 UA 추가
         s.setUserAgentString(s.getUserAgentString() + " SympotalkLauncher/1.0");
+
+        // ── JavaScript Bridge: JS에서 Android 기능 호출 가능 ──
+        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
         // ── WebChromeClient: 카메라 권한 처리 ──
         webView.setWebChromeClient(new WebChromeClient() {
@@ -249,6 +253,57 @@ public class MainActivity extends AppCompatActivity {
             webView = null;
         }
         super.onDestroy();
+    }
+
+    // ═════════════════════════════════════════════════════
+    // JavaScript Bridge: window.AndroidBridge.xxx() 로 호출
+    // ═════════════════════════════════════════════════════
+    public class AndroidBridge {
+
+        /** JS에서 Android WiFi 설정 화면 열기 */
+        @JavascriptInterface
+        public void openWifiSettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this,
+                        "WiFi 설정을 열 수 없습니다: " + e.getMessage(),
+                        Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        /** JS에서 Android 전체 설정 화면 열기 */
+        @JavascriptInterface
+        public void openSettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_SETTINGS);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception ignored) {}
+            });
+        }
+
+        /** JS에서 환경 확인 */
+        @JavascriptInterface
+        public boolean isAndroidApp() { return true; }
+
+        /** 앱 종료 (외부 브라우저로 전환 등) */
+        @JavascriptInterface
+        public void exitApp() {
+            runOnUiThread(() -> moveTaskToBack(true));
+        }
+
+        /** 짧은 토스트 메시지 */
+        @JavascriptInterface
+        public void toast(String msg) {
+            runOnUiThread(() ->
+                Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
+        }
     }
 
     @Override

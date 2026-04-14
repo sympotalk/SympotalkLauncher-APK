@@ -746,7 +746,7 @@
       <iframe id="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation" allowfullscreen></iframe>
     </section>
 
-    <!-- QR 링크 스캐너 -->
+    <!-- WiFi QR 스캐너 -->
     <section id="view-wifi" class="view">
       <div id="wifi-content">
         <div id="scanner-container" style="display:none">
@@ -760,33 +760,46 @@
         </div>
 
         <div class="wifi-scan-btns">
-          <button id="btn-start-scan" class="btn-scan btn-scan-start" onclick="startQRScan()">
+          <button id="btn-start-scan" class="btn-scan btn-scan-start" onclick="startWifiScan()">
             📷 카메라 시작
           </button>
-          <button id="btn-stop-scan" class="btn-scan btn-scan-stop" onclick="stopQRScan()" style="display:none">
+          <button id="btn-stop-scan" class="btn-scan btn-scan-stop" onclick="stopWifiScan()" style="display:none">
             ⏹ 중지
           </button>
         </div>
 
-        <div id="scan-status">웹 링크 QR 코드를 카메라에 비춰주세요</div>
+        <div id="scan-status">WiFi QR 코드를 카메라에 비춰주세요</div>
 
         <div id="scan-result" style="width:100%;max-width:500px">
-          <div id="qr-url-card" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px">
-            <div style="font-size:14px;font-weight:700;color:#22c55e;margin-bottom:12px">✅ 링크 감지됨</div>
+          <div id="wifi-result-card">
+            <div class="wifi-result-title">
+              ✅ WiFi 정보 감지됨
+            </div>
             <div class="wifi-field">
-              <div class="wifi-field-label">URL</div>
+              <div class="wifi-field-label">네트워크 이름 (SSID)</div>
               <div class="wifi-field-value">
-                <span id="qr-url-text" style="font-size:13px;word-break:break-all">-</span>
+                <span id="wifi-ssid">-</span>
+                <button class="btn-copy" onclick="copyText('wifi-ssid', this)">복사</button>
               </div>
             </div>
-            <button class="btn-save" style="margin-top:12px" id="btn-open-qr-url">
-              🔗 브라우저에서 열기
-            </button>
+            <div class="wifi-field" id="wifi-pwd-field">
+              <div class="wifi-field-label">비밀번호</div>
+              <div class="wifi-field-value">
+                <span id="wifi-password">-</span>
+                <button class="btn-copy" onclick="copyText('wifi-password', this)">복사</button>
+              </div>
+            </div>
+            <div class="wifi-field">
+              <div class="wifi-field-label">보안 방식</div>
+              <div class="wifi-field-value">
+                <span id="wifi-security">-</span>
+              </div>
+            </div>
           </div>
 
           <div id="qr-raw-card" style="margin-top:10px">
             <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px">
-              📎 QR 내용 (URL 아님)
+              📎 QR 내용 (WiFi 아님)
             </div>
             <div id="qr-raw-text">-</div>
             <button class="btn-copy" onclick="copyText('qr-raw-text', this)" style="margin-top:4px">전체 복사</button>
@@ -798,18 +811,30 @@
     <!-- 설정 -->
     <section id="view-settings" class="view">
       <div class="page-content">
-
         <div class="settings-group">
-          <div class="settings-group-title">네트워크</div>
+          <div class="settings-group-title">링크 기본 주소</div>
+
           <div class="settings-item">
-            <div class="settings-label">WiFi 설정</div>
+            <div class="settings-label">참석자 링크 기본 주소</div>
             <div class="settings-desc">
-              태블릿의 WiFi 설정 화면을 엽니다. 행사장 공유기에 연결할 때 사용하세요.
+              참석자 링크: <strong>{기본주소}/{행사슬러그}</strong><br>
+              예) https://pad.sympotalk.com → https://pad.sympotalk.com/care0502
             </div>
-            <button class="btn-save" onclick="openWifiSettings()">
-              📶 WiFi 설정 열기
-            </button>
+            <input class="settings-input" id="input-attendee-base" type="url"
+              placeholder="https://pad.sympotalk.com" autocomplete="off" autocorrect="off" spellcheck="false">
           </div>
+
+          <div class="settings-item">
+            <div class="settings-label">운영자 링크 기본 주소</div>
+            <div class="settings-desc">
+              콘솔·의장 링크 기본 주소<br>
+              예) https://sympotalk.com → 콘솔: .../console/{토큰}
+            </div>
+            <input class="settings-input" id="input-operator-base" type="url"
+              placeholder="https://sympotalk.com" autocomplete="off" autocorrect="off" spellcheck="false">
+          </div>
+
+          <button class="btn-save" onclick="saveSettings()">설정 저장</button>
         </div>
 
         <div class="settings-group">
@@ -817,7 +842,8 @@
           <div class="settings-item">
             <div class="settings-label">절전 방지</div>
             <div class="settings-desc">
-              장시간 사용 시 화면이 꺼지지 않도록 합니다. APK 설치 시 자동으로 활성화됩니다.
+              장시간 사용 시 화면이 꺼지지 않도록 합니다.<br>
+              Android 설정 → 개발자 옵션 → <strong>화면 켜짐 유지</strong>를 함께 활성화하면 더욱 안정적입니다.
             </div>
             <button class="btn-save" style="background:#334155;color:#e2e8f0;margin-top:4px"
               onclick="requestWakeLock()">절전 방지 활성화</button>
@@ -828,13 +854,11 @@
           <div class="settings-group-title">앱 정보</div>
           <div class="info-box">
             <strong>Sympotalk 행사 런처</strong><br>
-            링크 기본 주소: <strong>https://sympopad.com</strong><br>
+            LG G Pad 5 (Android 9) 전용<br>
             Supabase: sympotalkv2<br>
-            버전: <span id="app-version">1.0.1</span><br>
-            실행 환경: <span id="app-env">웹</span>
+            버전: 1.0.0
           </div>
         </div>
-
       </div>
     </section>
 
@@ -851,12 +875,10 @@
     </button>
     <button class="nav-btn" id="nav-wifi" onclick="showView('wifi')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-        <rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="21"/>
-        <line x1="18" y1="14" x2="18" y2="17"/><line x1="14" y1="18" x2="18" y2="18"/>
-        <line x1="21" y1="18" x2="21" y2="21"/><line x1="18" y1="21" x2="21" y2="21"/>
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
       </svg>
-      QR 스캔
+      WiFi QR
     </button>
     <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -880,16 +902,12 @@
 'use strict';
 
 /* ═══════════════════════════════════════════════════════
-   CONFIG (하드코딩 - 변경 불필요)
+   CONFIG
 ═══════════════════════════════════════════════════════ */
 var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHFuZnd1dmhsYW90dGNucGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2OTYxMzMsImV4cCI6MjA4MzI3MjEzM30.F6pA27vkaAJFjK54vkYPbOI7K1LE2tQFVaPG-bA8r3c';
-var BASE_URL = 'https://sympopad.com';   // 참석자·운영자 링크 기본 주소
-var REFRESH_INTERVAL = 5 * 60 * 1000;    // 5분마다 자동 갱신
-var KEEPALIVE_INTERVAL = 55 * 1000;      // 55초마다 keepalive
-
-// Android APK 에서 주입되는 Native 브릿지 (JS Interface)
-var hasNativeBridge = (typeof AndroidBridge !== 'undefined');
+var REFRESH_INTERVAL = 5 * 60 * 1000;  // 5분마다 자동 갱신
+var KEEPALIVE_INTERVAL = 55 * 1000;    // 55초마다 keepalive
 
 /* ═══════════════════════════════════════════════════════
    STATE
@@ -907,18 +925,27 @@ var state = {
 };
 
 /* ═══════════════════════════════════════════════════════
-   WIFI SETTINGS (Android Bridge)
+   SETTINGS
 ═══════════════════════════════════════════════════════ */
-function openWifiSettings() {
-  // APK 환경: Native Android WiFi 설정 앱 열기
-  if (hasNativeBridge && typeof AndroidBridge.openWifiSettings === 'function') {
-    try {
-      AndroidBridge.openWifiSettings();
-      return;
-    } catch(e) {}
-  }
-  // 웹 환경: 안내만 표시
-  alert('태블릿 홈 화면에서 설정 → 네트워크 및 인터넷 → WiFi 에서 설정하세요.\n\n(APK 설치 시 이 버튼으로 바로 WiFi 설정이 열립니다)');
+function getSettings() {
+  return {
+    attendeeBase: localStorage.getItem('attendee_base') || '',
+    operatorBase: localStorage.getItem('operator_base') || ''
+  };
+}
+
+function saveSettings() {
+  var attendee = document.getElementById('input-attendee-base').value.trim().replace(/\/$/, '');
+  var operator = document.getElementById('input-operator-base').value.trim().replace(/\/$/, '');
+  localStorage.setItem('attendee_base', attendee);
+  localStorage.setItem('operator_base', operator);
+  showToast('설정이 저장되었습니다');
+}
+
+function loadSettingsInputs() {
+  var s = getSettings();
+  document.getElementById('input-attendee-base').value = s.attendeeBase;
+  document.getElementById('input-operator-base').value = s.operatorBase;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -928,7 +955,7 @@ function showView(name) {
   if (name === state.currentView) return;
 
   // WiFi 스캐너 중지
-  if (state.currentView === 'wifi') stopQRScan();
+  if (state.currentView === 'wifi') stopWifiScan();
 
   // 브라우저 뷰 종료
   if (state.currentView === 'browser' && name !== 'browser') {
@@ -969,8 +996,11 @@ function showView(name) {
 
   // 상단 타이틀 업데이트
   var titleEl = document.getElementById('topbar-title');
-  var titles = { home: '행사 런처', wifi: 'QR 스캔', settings: '설정', detail: '행사 상세', browser: '' };
+  var titles = { home: '행사 런처', wifi: 'WiFi QR 스캐너', settings: '설정', detail: '행사 상세', browser: '' };
   titleEl.textContent = titles[name] || '';
+
+  // 설정 화면 진입 시 값 로드
+  if (name === 'settings') loadSettingsInputs();
 }
 
 function handleBack() {
@@ -1106,22 +1136,26 @@ function openEventDetail(event) {
   var container = document.getElementById('detail-links-container');
   container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>룸 정보 불러오는 중...</span></div>';
 
-  // URL 경고 제거 (하드코딩된 BASE_URL 사용)
+  var settings = getSettings();
   var warnEl = document.getElementById('detail-url-warning');
-  if (warnEl) warnEl.style.display = 'none';
+  if (!settings.attendeeBase && !settings.operatorBase) {
+    warnEl.style.display = 'flex';
+  } else {
+    warnEl.style.display = 'none';
+  }
 
   supaFetch('rooms', {
     'select': 'id,name,slug,chair_token,console_token,moderator_token',
     'event_id': 'eq.' + event.id,
     'order': 'sort_order.asc.nullslast'
   }).then(function(rooms) {
-    renderDetailLinks(event, rooms);
+    renderDetailLinks(event, rooms, settings);
   }).catch(function(err) {
     container.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>룸 정보 불러오기 실패</div></div>';
   });
 }
 
-function renderDetailLinks(event, rooms) {
+function renderDetailLinks(event, rooms, settings) {
   var container = document.getElementById('detail-links-container');
   var html = '';
 
@@ -1132,37 +1166,60 @@ function renderDetailLinks(event, rooms) {
     '참석자 링크' +
   '</div>';
 
-  var attendeeUrl = BASE_URL + '/' + event.slug;
-  html += renderLinkBtn('icon-attendee', '👥', '참석자 입장', attendeeUrl, event.slug, attendeeUrl);
+  if (settings.attendeeBase) {
+    var attendeeUrl = settings.attendeeBase + '/' + event.slug;
+    html += renderLinkBtn('icon-attendee', '👥', '참석자 입장', attendeeUrl, event.slug, attendeeUrl);
+  } else {
+    html += '<div style="padding:12px;color:#64748b;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155">' +
+      '설정에서 참석자 링크 기본 주소를 입력해주세요</div>';
+  }
   html += '</div>';
 
-  // ── 운영자 링크 (룸별) ──
+  // ── 운영자 링크 ──
   if (rooms && rooms.length > 0) {
     for (var i = 0; i < rooms.length; i++) {
       var room = rooms[i];
       html += '<div class="link-group">';
       html += '<div class="room-title">🚪 ' + escHtml(room.name || ('룸 ' + (i + 1))) + '</div>';
 
-      if (room.console_token) {
-        var consoleUrl = BASE_URL + '/console/' + room.console_token;
-        html += renderLinkBtn('icon-console', '🖥️', '콘솔 (운영자)', consoleUrl, room.console_token, consoleUrl);
-      }
-      if (room.chair_token) {
-        var chairUrl = BASE_URL + '/chair/' + room.chair_token;
-        html += renderLinkBtn('icon-chair', '🎤', '의장 패드', chairUrl, room.chair_token, chairUrl);
-      }
-      if (room.moderator_token) {
-        var moderatorUrl = BASE_URL + '/moderator/' + room.moderator_token;
-        html += renderLinkBtn('icon-moderator', '📋', '진행자 패드', moderatorUrl, room.moderator_token, moderatorUrl);
+      if (settings.operatorBase) {
+        if (room.console_token) {
+          var consoleUrl = settings.operatorBase + '/console/' + room.console_token;
+          html += renderLinkBtn('icon-console', '🖥️', '콘솔 (운영자)', consoleUrl, room.console_token, consoleUrl);
+        }
+        if (room.chair_token) {
+          var chairUrl = settings.operatorBase + '/chair/' + room.chair_token;
+          html += renderLinkBtn('icon-chair', '🎤', '의장 패드', chairUrl, room.chair_token, chairUrl);
+        }
+        if (room.moderator_token) {
+          var moderatorUrl = settings.operatorBase + '/moderator/' + room.moderator_token;
+          html += renderLinkBtn('icon-moderator', '📋', '진행자 패드', moderatorUrl, room.moderator_token, moderatorUrl);
+        }
+      } else {
+        // 운영자 기본주소 없으면 토큰만 표시
+        if (room.console_token) {
+          html += renderLinkBtn('icon-console', '🖥️', '콘솔 (운영자)', '[기본주소]/console/' + room.console_token, room.console_token, null);
+        }
+        if (room.chair_token) {
+          html += renderLinkBtn('icon-chair', '🎤', '의장 패드', '[기본주소]/chair/' + room.chair_token, room.chair_token, null);
+        }
+        if (room.moderator_token) {
+          html += renderLinkBtn('icon-moderator', '📋', '진행자 패드', '[기본주소]/moderator/' + room.moderator_token, room.moderator_token, null);
+        }
       }
       html += '</div>';
     }
   } else {
-    // 룸 없음: 이벤트 슬러그만으로 기본 운영자 링크
+    // 룸 없음: 이벤트 슬러그만으로 표시
     html += '<div class="link-group">';
     html += '<div class="link-group-title">🖥️ 운영자 링크</div>';
-    var opUrl = BASE_URL + '/' + event.slug;
-    html += renderLinkBtn('icon-console', '🖥️', '운영자 입장', opUrl, event.slug, opUrl);
+    if (settings.operatorBase) {
+      var opUrl = settings.operatorBase + '/' + event.slug;
+      html += renderLinkBtn('icon-console', '🖥️', '운영자 입장', opUrl, event.slug, opUrl);
+    } else {
+      html += '<div style="padding:12px;color:#64748b;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155">' +
+        '등록된 룸이 없거나 설정에서 운영자 링크 기본 주소를 입력해주세요</div>';
+    }
     html += '</div>';
   }
 
@@ -1237,7 +1294,7 @@ function openExternal() {
 /* ═══════════════════════════════════════════════════════
    WIFI QR SCANNER
 ═══════════════════════════════════════════════════════ */
-function startQRScan() {
+function startWifiScan() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     document.getElementById('scan-status').innerHTML =
       '<div class="camera-denied">이 기기에서는 카메라 접근이 지원되지 않습니다</div>';
@@ -1263,7 +1320,7 @@ function startQRScan() {
     container.style.display = 'block';
     video.srcObject = stream;
     video.play();
-    document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
+    document.getElementById('scan-status').textContent = 'QR 코드를 카메라에 비춰주세요';
     requestAnimationFrame(scanQRFrame);
   }).catch(function(err) {
     document.getElementById('btn-start-scan').style.display = 'flex';
@@ -1304,40 +1361,33 @@ function scanQRFrame() {
 
 function handleQRResult(text) {
   document.getElementById('scan-status').textContent = '✅ QR 코드 인식 완료';
-  var trimmed = (text || '').trim();
 
-  // URL 패턴 감지 (http:// 또는 https://)
-  var urlMatch = trimmed.match(/^(https?:\/\/[^\s]+)$/i);
-  if (urlMatch) {
-    var url = urlMatch[1];
-    document.getElementById('qr-url-text').textContent = url;
-    document.getElementById('qr-url-card').style.display = 'block';
+  // WiFi QR 형식: WIFI:T:WPA;S:ssid;P:password;;
+  var wifiMatch = text.match(/^WIFI:/i);
+  if (wifiMatch) {
+    var ssid = extractWifiField(text, 'S');
+    var password = extractWifiField(text, 'P');
+    var security = extractWifiField(text, 'T') || 'WPA';
+
+    document.getElementById('wifi-ssid').textContent = ssid || '(이름 없음)';
+    document.getElementById('wifi-password').textContent = password || '(비밀번호 없음)';
+    document.getElementById('wifi-security').textContent = security;
+
+    var pwdField = document.getElementById('wifi-pwd-field');
+    pwdField.style.display = password ? '' : 'none';
+
+    document.getElementById('wifi-result-card').classList.add('show');
     document.getElementById('qr-raw-card').classList.remove('show');
 
-    // 열기 버튼 활성화
-    var openBtn = document.getElementById('btn-open-qr-url');
-    openBtn.onclick = function() {
-      stopQRScan();
-      openLink(encodeURIComponent(url));
-    };
-
+    // 진동 피드백
     if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
-
-    // 자동 열기 (선택): 1초 후 자동으로 링크 열기
-    setTimeout(function() {
-      if (state.scannerStream) {  // 사용자가 중지하지 않았으면
-        stopQRScan();
-        openLink(encodeURIComponent(url));
-      }
-    }, 1200);
-    return;
+  } else {
+    // WiFi가 아닌 일반 QR
+    document.getElementById('qr-raw-text').textContent = text;
+    document.getElementById('qr-raw-card').classList.add('show');
+    document.getElementById('wifi-result-card').classList.remove('show');
+    if (navigator.vibrate) navigator.vibrate(100);
   }
-
-  // URL이 아닌 일반 텍스트
-  document.getElementById('qr-raw-text').textContent = trimmed;
-  document.getElementById('qr-raw-card').classList.add('show');
-  document.getElementById('qr-url-card').style.display = 'none';
-  if (navigator.vibrate) navigator.vibrate(100);
 
   // 스캐너 계속 실행 (다른 QR 스캔 가능)
   setTimeout(function() {
@@ -1347,7 +1397,14 @@ function handleQRResult(text) {
   }, 2000);
 }
 
-function stopQRScan() {
+function extractWifiField(text, field) {
+  // WIFI:T:WPA;S:ssid;P:pass;; 형식 파싱
+  var regex = new RegExp('(?:^|;)' + field + ':([^;]*)(?:;|$)', 'i');
+  var match = text.match(regex);
+  return match ? match[1] : '';
+}
+
+function stopWifiScan() {
   if (state.scannerRAF) {
     cancelAnimationFrame(state.scannerRAF);
     state.scannerRAF = null;
@@ -1364,7 +1421,7 @@ function stopQRScan() {
   document.getElementById('scanner-container').style.display = 'none';
   document.getElementById('btn-start-scan').style.display = 'flex';
   document.getElementById('btn-stop-scan').style.display = 'none';
-  document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
+  document.getElementById('scan-status').textContent = 'WiFi QR 코드를 카메라에 비춰주세요';
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1497,10 +1554,6 @@ document.addEventListener('DOMContentLoaded', function() {
   loadEvents();
   startKeepaliveLoop();
   startRefreshLoop();
-
-  // 실행 환경 표시 (APK vs 웹)
-  var envEl = document.getElementById('app-env');
-  if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
 
   // 첫 사용자 인터랙션 시 NoSleep 활성화
   document.addEventListener('touchstart', function onFirstTouch() {
