@@ -861,21 +861,23 @@
                 </div>
               </div>
 
-              <!-- 설치 실패 감지 패널 -->
-              <div id="app-install-failed" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px;margin-top:8px">
-                <div style="font-size:14px;font-weight:700;color:#ef4444;margin-bottom:8px">
-                  ⚠️ 설치 실패 감지
+              <!-- 설치 미완료 감지 패널 (실패 또는 취소 모두 포함) -->
+              <div id="app-install-failed" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px;margin-top:8px">
+                <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:8px">
+                  ⚠️ 업데이트가 완료되지 않았습니다
                 </div>
                 <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px">
-                  기존 앱과 <strong>서명이 달라</strong> 업데이트가 거부된 것으로 보입니다.<br>
-                  <strong>해결 방법:</strong><br>
-                  1. 아래 버튼으로 <strong>기존 앱 삭제</strong><br>
-                  2. 자동으로 최신 APK 다운로드 창 열림<br>
-                  3. 수동으로 설치
+                  설치가 <strong>취소</strong>되었거나 <strong>서명 불일치</strong>로 거부되었을 수 있습니다.<br>
+                  다시 시도하거나, 서명 문제라면 기존 앱을 삭제 후 재설치 해주세요.
                 </div>
-                <button class="btn-save" onclick="uninstallAndReinstall()" style="background:#ef4444;color:#fff">
-                  🗑️ 기존 앱 삭제 후 재설치
-                </button>
+                <div style="display:flex;gap:6px">
+                  <button class="btn-save" style="flex:1;background:#60a5fa" onclick="checkAppUpdate()">
+                    🔄 다시 시도
+                  </button>
+                  <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="uninstallAndReinstall()">
+                    🗑️ 앱 삭제 후 재설치
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2012,7 +2014,8 @@ function startAppDownload() {
   document.getElementById('app-download-percent').textContent = '0%';
   document.getElementById('app-download-bar').style.width = '0%';
   document.getElementById('app-update-status').textContent = '📥 다운로드를 시작합니다...';
-  // 설치 실패 감지를 위한 타임스탬프
+  // 재시도 시 이전 판정 상태 리셋 + 새 타임스탬프 기록
+  installOutcomeShown = false;
   try { localStorage.setItem('expecting_since', String(Date.now())); } catch(e) {}
   try {
     AndroidBridge.downloadAndInstallApk(pendingApkUrl);
@@ -2038,12 +2041,21 @@ window.onAppDownloadError = function(msg) {
   document.getElementById('app-update-status').innerHTML = '❌ ' + msg;
 };
 
+// 설치 결과 판정은 1회만 표시 (재진입 방지 플래그)
+var installOutcomeShown = false;
+
 // 설치 시도 후 앱 복귀 시 실제 설치 성공 여부 확인
 // — localStorage 사용: APK 재설치로 프로세스 kill 된 뒤에도 유지
 // — BuildConfig.VERSION_NAME (native) 을 단일 진실로 사용
+// — 사용자 취소/실패 모두 "업데이트가 완료되지 않았습니다" 로 완화된 문구
 function checkInstallOutcome() {
-  var expecting;
-  try { expecting = localStorage.getItem('expecting_update_to'); } catch(e) { return; }
+  if (installOutcomeShown) return;
+
+  var expecting = null, ts = 0;
+  try {
+    expecting = localStorage.getItem('expecting_update_to');
+    ts = parseInt(localStorage.getItem('expecting_since') || '0', 10);
+  } catch(e) { return; }
   if (!expecting) return;
 
   // Native Bridge 없으면 판단 불가 — flag 만 유지
@@ -2057,21 +2069,36 @@ function checkInstallOutcome() {
   if (currentNative === expecting) {
     // 실제로 APK 가 업데이트 됨
     showToast('✅ v' + expecting + ' 으로 업데이트 완료');
-    try { localStorage.removeItem('expecting_update_to'); } catch(e) {}
-  } else {
-    // 아직 APK 가 업데이트 안 됨 → 설치 실패 (서명 불일치 등) 또는 사용자가 설치 취소
-    // 단, 다운로드 완료 후 일정 시간(2분) 지나도 업데이트 안 됐으면 실패로 간주
-    var ts = 0;
-    try { ts = parseInt(localStorage.getItem('expecting_since') || '0', 10); } catch(e) {}
-    if (ts && (Date.now() - ts) > 120000) {
-      document.getElementById('app-install-failed').style.display = 'block';
-      document.getElementById('app-update-available').style.display = 'none';
-      try {
-        localStorage.removeItem('expecting_update_to');
-        localStorage.removeItem('expecting_since');
-      } catch(e) {}
-    }
+    installOutcomeShown = true;
+    clearInstallExpectation();
+    return;
   }
+
+  // 아직 업데이트 안 됨 → 취소 또는 실패. 2분 가드로 구분.
+  //   - ts 가 없으면(레거시 상태) 즉시 플래그 정리 (데드락 방지)
+  //   - 2분 이상 경과 시: "완료되지 않음" UI 표시
+  if (!ts) {
+    clearInstallExpectation();
+    return;
+  }
+  if ((Date.now() - ts) > 120000) {
+    var panelEl = document.getElementById('app-install-failed');
+    if (panelEl) panelEl.style.display = 'block';
+    var availEl = document.getElementById('app-update-available');
+    if (availEl) availEl.style.display = 'none';
+    // 문구 부드럽게 (취소한 경우도 있어 "실패" 단정 X)
+    var titleEl = panelEl ? panelEl.querySelector('div') : null;
+    if (titleEl) titleEl.innerHTML = '⚠️ 업데이트가 완료되지 않았습니다';
+    installOutcomeShown = true;
+    clearInstallExpectation();
+  }
+}
+
+function clearInstallExpectation() {
+  try {
+    localStorage.removeItem('expecting_update_to');
+    localStorage.removeItem('expecting_since');
+  } catch(e) {}
 }
 
 // 기존 앱 삭제 후 재설치 플로우
