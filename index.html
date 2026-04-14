@@ -739,6 +739,26 @@
             <div id="wifi-scan-status" style="font-size:12px;color:#64748b;margin-top:8px;text-align:center"></div>
           </div>
 
+          <!-- 자주 쓰는 비밀번호 저장 -->
+          <div class="settings-item">
+            <div class="settings-label">자주 쓰는 WiFi 비밀번호</div>
+            <div class="settings-desc">
+              저장하면 스캔 목록에서 <strong>⚡ 원탭 연결</strong> 버튼이 표시됩니다.<br>
+              비밀번호 입력창에도 자동 채움됩니다.
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="settings-input" id="input-default-wifi-pw" type="password"
+                placeholder="예) a01044447995" autocomplete="off" autocorrect="off" spellcheck="false"
+                style="flex:1">
+              <button class="btn-save" style="width:auto;padding:10px 14px;margin:0"
+                onclick="saveDefaultWifiPassword()">저장</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-top:8px">
+              <input type="checkbox" id="default-pw-show" onchange="toggleDefaultPwVisible()">
+              비밀번호 표시
+            </label>
+          </div>
+
           <!-- 주변 WiFi 목록 -->
           <div id="wifi-list" style="display:none;margin-top:8px"></div>
         </div>
@@ -751,7 +771,12 @@
             <div style="font-size:12px;color:#64748b;margin-bottom:6px">비밀번호</div>
             <input type="password" id="wifi-modal-password" class="settings-input"
               placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
-              style="margin-bottom:10px">
+              style="margin-bottom:6px">
+            <button id="btn-fill-default-pw" class="btn-save"
+              style="display:none;width:auto;padding:6px 12px;margin:0 0 10px 0;background:#334155;color:#93c5fd;font-size:12px;font-weight:500"
+              onclick="fillDefaultPassword()">
+              ⚡ 자주 쓰는 비밀번호 채우기
+            </button>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
               <input type="checkbox" id="wifi-show-password" onchange="toggleWifiPasswordVisible()">
               비밀번호 표시
@@ -866,6 +891,37 @@ var state = {
 var pendingWifi = null;      // {ssid, security} 비밀번호 입력 대기 중인 네트워크
 var wifiRefreshTimer = null;
 
+/* ── 자주 쓰는 WiFi 비밀번호 (localStorage) ── */
+function getDefaultWifiPassword() {
+  try { return localStorage.getItem('default_wifi_pw') || ''; } catch(e) { return ''; }
+}
+function saveDefaultWifiPassword() {
+  var pw = document.getElementById('input-default-wifi-pw').value;
+  if (pw === '') {
+    localStorage.removeItem('default_wifi_pw');
+    showToast('저장된 비밀번호가 삭제되었습니다');
+  } else {
+    localStorage.setItem('default_wifi_pw', pw);
+    showToast('자주 쓰는 비밀번호가 저장되었습니다');
+  }
+  // UI 갱신: 스캔 목록이 이미 표시 중이면 원탭 버튼 노출
+  refreshWifiListUIFromCache();
+}
+function toggleDefaultPwVisible() {
+  var input = document.getElementById('input-default-wifi-pw');
+  var checked = document.getElementById('default-pw-show').checked;
+  input.type = checked ? 'text' : 'password';
+}
+function fillDefaultPassword() {
+  var pw = getDefaultWifiPassword();
+  if (pw) {
+    document.getElementById('wifi-modal-password').value = pw;
+  }
+}
+
+/* 스캔 결과 캐시 (저장 비밀번호 변경 시 UI 즉시 갱신) */
+var cachedScanResults = null;
+
 function openWifiSettings() {
   if (hasNativeBridge && typeof AndroidBridge.openWifiSettings === 'function') {
     try { AndroidBridge.openWifiSettings(); return; } catch(e) {}
@@ -928,6 +984,15 @@ window.onWifiScanResult = function(jsonArrayOrString) {
       ? JSON.parse(jsonArrayOrString) : jsonArrayOrString;
   } catch(e) { networks = []; }
 
+  cachedScanResults = networks || [];
+  renderWifiList(cachedScanResults);
+};
+
+function refreshWifiListUIFromCache() {
+  if (cachedScanResults) renderWifiList(cachedScanResults);
+}
+
+function renderWifiList(networks) {
   var statusEl = document.getElementById('wifi-scan-status');
   var listEl = document.getElementById('wifi-list');
 
@@ -937,7 +1002,11 @@ window.onWifiScanResult = function(jsonArrayOrString) {
     return;
   }
 
-  statusEl.textContent = networks.length + '개 네트워크 발견';
+  var defaultPw = getDefaultWifiPassword();
+  var hasDefaultPw = !!defaultPw;
+
+  statusEl.textContent = networks.length + '개 네트워크 발견' +
+    (hasDefaultPw ? ' · ⚡ 원탭 연결 가능' : '');
 
   var html = '';
   for (var i = 0; i < networks.length; i++) {
@@ -948,20 +1017,40 @@ window.onWifiScanResult = function(jsonArrayOrString) {
     for (var b = 0; b < 4; b++) {
       signalIcon += '<span style="display:inline-block;width:3px;height:' + ((b+1)*3) + 'px;background:' + (b < bars ? '#60a5fa' : '#334155') + ';margin-right:1px;vertical-align:bottom;border-radius:1px"></span>';
     }
-    html += '<button class="link-btn" style="width:100%" onclick="selectWifi(' +
-      JSON.stringify(n).replace(/"/g, '&quot;') + ')">' +
-      '<div style="display:flex;align-items:center;gap:10px;width:100%">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(n.ssid) + '</div>' +
-          '<div style="font-size:11px;color:#64748b;margin-top:2px">' + n.security + (isSecure ? ' 🔒' : ' 🔓') + ' · ' + n.level + ' dBm</div>' +
+
+    var netJson = JSON.stringify(n).replace(/"/g, '&quot;');
+    // 네트워크 행 (탭 시 비밀번호 모달)
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+      '<button class="link-btn" style="flex:1;margin:0" onclick="selectWifi(' + netJson + ')">' +
+        '<div style="display:flex;align-items:center;gap:10px;width:100%">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(n.ssid) + '</div>' +
+            '<div style="font-size:11px;color:#64748b;margin-top:2px">' + n.security + (isSecure ? ' 🔒' : ' 🔓') + ' · ' + n.level + ' dBm</div>' +
+          '</div>' +
+          '<div style="flex-shrink:0">' + signalIcon + '</div>' +
         '</div>' +
-        '<div style="flex-shrink:0">' + signalIcon + '</div>' +
-      '</div>' +
-    '</button>';
+      '</button>';
+
+    // 원탭 연결 버튼 (기본 비밀번호 저장됐고 WPA/WEP 보안인 경우)
+    if (hasDefaultPw && isSecure) {
+      html += '<button class="btn-save" style="width:auto;padding:10px 12px;margin:0;background:#22c55e;color:#052e16;font-size:13px;font-weight:700" title="자주 쓰는 비밀번호로 즉시 연결" ' +
+        'onclick="quickConnectWifi(' + netJson + ')">⚡</button>';
+    }
+    html += '</div>';
   }
   listEl.innerHTML = html;
   listEl.style.display = 'block';
-};
+}
+
+// 원탭 연결: 저장된 비밀번호로 바로 시도
+function quickConnectWifi(network) {
+  var pw = getDefaultWifiPassword();
+  if (!pw) {
+    alert('자주 쓰는 비밀번호가 저장되어 있지 않습니다.');
+    return;
+  }
+  connectWifiNow(network.ssid, pw, network.security);
+}
 
 window.onWifiScanError = function(msg) {
   var statusEl = document.getElementById('wifi-scan-status');
@@ -996,13 +1085,16 @@ function selectWifi(network) {
 
   // 비밀번호 모달 표시
   document.getElementById('wifi-modal-ssid').textContent = network.ssid;
-  document.getElementById('wifi-modal-password').value = '';
+  var defaultPw = getDefaultWifiPassword();
+  var pwInput = document.getElementById('wifi-modal-password');
+  pwInput.value = defaultPw || '';      // 저장된 비밀번호 자동 채움
+  pwInput.type = 'password';
   document.getElementById('wifi-show-password').checked = false;
-  document.getElementById('wifi-modal-password').type = 'password';
+  // "자주 쓰는 비밀번호 채우기" 버튼은 저장돼 있고 현재 필드가 비어있을 때만 노출
+  var fillBtn = document.getElementById('btn-fill-default-pw');
+  fillBtn.style.display = (defaultPw && !pwInput.value) ? 'inline-block' : 'none';
   document.getElementById('wifi-password-modal').style.display = 'flex';
-  setTimeout(function() {
-    document.getElementById('wifi-modal-password').focus();
-  }, 100);
+  setTimeout(function() { pwInput.focus(); pwInput.select(); }, 100);
 }
 
 function closeWifiPasswordModal() {
@@ -1083,7 +1175,12 @@ function showView(name) {
   titleEl.textContent = titles[name] || '';
 
   // 설정 탭 진입 시 현재 WiFi 상태 갱신
-  if (name === 'settings') updateCurrentWifi();
+  if (name === 'settings') {
+    updateCurrentWifi();
+    // 저장된 기본 비밀번호 입력창에 표시
+    var pwInput = document.getElementById('input-default-wifi-pw');
+    if (pwInput) pwInput.value = getDefaultWifiPassword();
+  }
 }
 
 function handleBack() {

@@ -212,50 +212,106 @@ public class WifiHelper {
         }
 
         try {
-            WifiConfiguration config = new WifiConfiguration();
-            config.SSID = "\"" + ssid + "\"";
+            WifiConfiguration config = buildConfig(ssid, password, security);
 
-            String sec = security == null ? "" : security.toUpperCase();
-            if (sec.contains("WPA")) {
-                config.preSharedKey = "\"" + password + "\"";
-            } else if (sec.contains("WEP")) {
-                config.wepKeys[0] = "\"" + password + "\"";
-                config.wepTxKeyIndex = 0;
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
-            } else {
-                // Open network
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-            }
-
-            // 기존에 동일 SSID 설정이 있으면 제거
+            // 1) 먼저 기존 configured networks에서 동일 SSID 찾기
+            int existingId = -1;
             List<WifiConfiguration> existing = null;
             try { existing = wifiManager.getConfiguredNetworks(); } catch (Exception ignored) {}
             if (existing != null) {
                 for (WifiConfiguration ex : existing) {
                     if (ex.SSID != null && ex.SSID.equals(config.SSID)) {
-                        wifiManager.removeNetwork(ex.networkId);
+                        existingId = ex.networkId;
+                        break;
                     }
                 }
             }
 
-            int networkId = wifiManager.addNetwork(config);
+            int networkId = -1;
+
+            if (existingId != -1) {
+                // 기존 프로필 업데이트 시도
+                config.networkId = existingId;
+                networkId = wifiManager.updateNetwork(config);
+                // updateNetwork 실패 시 remove+add 시도
+                if (networkId == -1) {
+                    wifiManager.removeNetwork(existingId);
+                    wifiManager.saveConfiguration();
+                    config.networkId = -1;
+                    networkId = wifiManager.addNetwork(config);
+                }
+            } else {
+                // 새 네트워크 추가
+                networkId = wifiManager.addNetwork(config);
+            }
+
             if (networkId == -1) {
-                callback.onConnectResult(false, "네트워크 추가 실패");
+                callback.onConnectResult(false,
+                    "네트워크 추가 실패. 이 SSID가 이미 시스템에 저장돼 있으면 '시스템 설정' 버튼에서 해당 WiFi '저장 안 함(잊기)' 후 다시 시도해주세요.");
                 return;
             }
 
             wifiManager.disconnect();
             boolean enabled = wifiManager.enableNetwork(networkId, true);
             wifiManager.reconnect();
+            try { wifiManager.saveConfiguration(); } catch (Exception ignored) {}
 
             if (enabled) {
                 callback.onConnectResult(true, ssid + " 연결 시도 중...");
             } else {
-                callback.onConnectResult(false, "네트워크 활성화 실패");
+                callback.onConnectResult(false, "네트워크 활성화 실패 (잠시 후 다시 시도하세요)");
             }
         } catch (Exception e) {
             callback.onConnectResult(false, "오류: " + e.getMessage());
         }
+    }
+
+    /** 완전한 WPA/WPA2/WEP/Open WifiConfiguration 빌드 */
+    private WifiConfiguration buildConfig(String ssid, String password, String security) {
+        WifiConfiguration config = new WifiConfiguration();
+        config.SSID = "\"" + ssid + "\"";
+        config.status = WifiConfiguration.Status.ENABLED;
+        config.priority = 40;
+
+        String sec = security == null ? "" : security.toUpperCase();
+
+        if (sec.contains("WPA3")) {
+            // WPA3 SAE - Android 10+ 전용, Android 9에선 WPA2로 폴백
+            config.preSharedKey = "\"" + password + "\"";
+            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+            config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+            config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+            config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+        } else if (sec.contains("WPA")) {
+            // WPA / WPA2 PSK - 완전한 알고리즘 세트 명시 (addNetwork -1 방지)
+            config.preSharedKey = "\"" + password + "\"";
+            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+            config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+            config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+            config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+            config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+            config.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
+            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
+        } else if (sec.contains("WEP")) {
+            // WEP - hex는 따옴표 없이, ASCII는 따옴표로 감싸기
+            boolean isHex = password != null
+                && (password.length() == 10 || password.length() == 26 || password.length() == 58)
+                && password.matches("[0-9A-Fa-f]+");
+            config.wepKeys[0] = isHex ? password : "\"" + password + "\"";
+            config.wepTxKeyIndex = 0;
+            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+            config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+            config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
+            config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
+            config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+            config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
+        } else {
+            // Open network
+            config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+        }
+        return config;
     }
 }
