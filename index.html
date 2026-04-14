@@ -190,6 +190,7 @@
     .status-active  { background: rgba(34,197,94,0.15);  color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
     .status-upcoming{ background: rgba(96,165,250,0.15); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); }
     .status-today   { background: rgba(250,176,5,0.15);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+    .status-ended   { background: rgba(100,116,139,0.15);color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
     .event-arrow { color: #475569; font-size: 20px; flex-shrink: 0; }
 
     /* ─── Refresh / Empty ──────────────────────────────── */
@@ -998,10 +999,14 @@ function supaFetch(path, params) {
     url += '?' + qs;
   }
   return fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
     headers: {
       'apikey': SUPABASE_KEY,
       'Authorization': 'Bearer ' + SUPABASE_KEY,
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
     }
   }).then(function(r) { return r.json(); });
 }
@@ -1015,15 +1020,11 @@ function loadEvents() {
   spinner.style.display = 'inline-block';
   container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
 
-  var today = new Date();
-  today.setDate(today.getDate() - 1); // 하루 전부터 포함 (당일 행사)
-  var dateStr = today.toISOString().split('T')[0];
-
+  // 날짜 필터 제거 → status 만으로 필터. 종료된 행사는 상태 배지로 구분 표시.
   supaFetch('events', {
     'select': 'id,name,slug,status,start_date,end_date,agency',
     'status': 'in.(active,draft)',
-    'or': '(end_date.gte.' + dateStr + ',start_date.gte.' + dateStr + ')',
-    'order': 'start_date.asc'
+    'order': 'start_date.asc.nullslast'
   }).then(function(events) {
     spinner.style.display = 'none';
     renderEventList(events);
@@ -1038,15 +1039,28 @@ function loadEvents() {
 
 function getEventStatusInfo(event) {
   var today = new Date();
-  today.setHours(0, 0, 0, 0);
-  var todayStr = today.toISOString().split('T')[0];
+  var y = today.getFullYear();
+  var m = String(today.getMonth() + 1).padStart(2, '0');
+  var d = String(today.getDate()).padStart(2, '0');
+  var todayStr = y + '-' + m + '-' + d;
 
-  if (event.status === 'active') {
+  var start = event.start_date;
+  var end = event.end_date || start;
+
+  // 오늘 날짜가 행사 기간 내
+  if (start && end && start <= todayStr && todayStr <= end) {
     return { label: '진행중', cls: 'status-active' };
   }
-  if (event.start_date === todayStr || (event.end_date && event.end_date >= todayStr && event.start_date <= todayStr)) {
-    return { label: '오늘', cls: 'status-today' };
+  // 시작일이 미래
+  if (start && start > todayStr) {
+    return { label: '예정', cls: 'status-upcoming' };
   }
+  // 종료일이 과거 → 상태가 active여도 실제로는 종료된 것
+  if (end && end < todayStr) {
+    return { label: '종료', cls: 'status-ended' };
+  }
+  // status 기반 기본값
+  if (event.status === 'active') return { label: '진행중', cls: 'status-active' };
   return { label: '예정', cls: 'status-upcoming' };
 }
 
@@ -1430,6 +1444,34 @@ function startRefreshLoop() {
 }
 
 /* ═══════════════════════════════════════════════════════
+   VERSION LOADER (XMLHttpRequest - file:// 호환)
+═══════════════════════════════════════════════════════ */
+function loadAppVersion() {
+  var verEl = document.getElementById('app-version');
+  if (!verEl) return;
+
+  var xhr = new XMLHttpRequest();
+  try {
+    xhr.open('GET', 'version.txt?_=' + Date.now(), true);
+  } catch(e) {
+    verEl.textContent = '(열기실패)';
+    return;
+  }
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
+    // file:// 프로토콜에서는 status=0 이지만 responseText는 정상
+    var ok = (xhr.status === 200 || xhr.status === 0);
+    if (ok && xhr.responseText) {
+      verEl.textContent = xhr.responseText.trim() || '(빈파일)';
+    } else {
+      verEl.textContent = '(확인불가)';
+    }
+  };
+  xhr.onerror = function() { verEl.textContent = '(네트워크오류)'; };
+  try { xhr.send(null); } catch(e) { verEl.textContent = '(전송실패)'; }
+}
+
+/* ═══════════════════════════════════════════════════════
    UTILS
 ═══════════════════════════════════════════════════════ */
 function escHtml(str) {
@@ -1489,18 +1531,9 @@ document.addEventListener('DOMContentLoaded', function() {
   var envEl = document.getElementById('app-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
 
-  // 버전 표시 (version.txt 에서 동적으로 읽어오기)
-  fetch('./version.txt?_=' + Date.now(), { cache: 'no-store' })
-    .then(function(r) { return r.text(); })
-    .then(function(v) {
-      var ver = (v || '').trim();
-      var verEl = document.getElementById('app-version');
-      if (verEl && ver) verEl.textContent = ver;
-    })
-    .catch(function() {
-      var verEl = document.getElementById('app-version');
-      if (verEl) verEl.textContent = '(확인불가)';
-    });
+  // 버전 표시 (version.txt 동적 로드)
+  // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용
+  loadAppVersion();
 
   // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원
   try {
