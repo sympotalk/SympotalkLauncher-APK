@@ -14,7 +14,7 @@ android {
         versionName "1.0.0"
 
         // BuildConfig에 Cloudflare URL 포함
-        buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalk-launcher.pages.dev\""
+        buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalklauncher-apk.pages.dev\""
     }
 
     buildTypes {
