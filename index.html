@@ -831,7 +831,7 @@
             <strong>Sympotalk 행사 런처</strong><br>
             링크 기본 주소: <strong>https://sympopad.com</strong><br>
             Supabase: sympotalkv2<br>
-            버전: <span id="app-version">1.0.1</span><br>
+            버전: <span id="app-version">-</span><br>
             실행 환경: <span id="app-env">웹</span>
           </div>
         </div>
@@ -1488,6 +1488,19 @@ document.addEventListener('DOMContentLoaded', function() {
   // 실행 환경 표시 (APK vs 웹)
   var envEl = document.getElementById('app-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
+
+  // 버전 표시 (version.txt 에서 동적으로 읽어오기)
+  fetch('./version.txt?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r) { return r.text(); })
+    .then(function(v) {
+      var ver = (v || '').trim();
+      var verEl = document.getElementById('app-version');
+      if (verEl && ver) verEl.textContent = ver;
+    })
+    .catch(function() {
+      var verEl = document.getElementById('app-version');
+      if (verEl) verEl.textContent = '(확인불가)';
+    });
 
   // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원
   try {
