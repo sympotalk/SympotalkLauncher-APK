@@ -13,6 +13,8 @@ android-app/build/
 *.aab
 *.keystore
 *.jks
+# 공용 서명용 release.keystore 는 의도적으로 repo 에 포함 (서명 일관성)
+!android-app/release.keystore
 
 # IDE
 .idea/
