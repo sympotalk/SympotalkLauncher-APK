@@ -1380,11 +1380,14 @@ function proxyFetch(endpoint, fallbackFn) {
   }).then(function(r) {
     if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
     return r.json();
-  }).catch(function(err) {
-    // 프록시 실패 시 Supabase 직접 호출
-    if (typeof fallbackFn === 'function') {
-      return fallbackFn();
+  }).then(function(data) {
+    // 프록시가 200 + 비정상 응답(에러 객체 등) 을 반환한 경우 스키마 검증
+    if (!Array.isArray(data)) {
+      throw new Error('Proxy returned non-array: ' + JSON.stringify(data).slice(0, 100));
     }
+    return data;
+  }).catch(function(err) {
+    if (typeof fallbackFn === 'function') return fallbackFn();
     throw err;
   });
 }
@@ -1839,14 +1842,16 @@ document.addEventListener('visibilitychange', function() {
    - Service Worker 핑만 유지 (앱 프로세스 keepalive)
 ═══════════════════════════════════════════════════════ */
 function startRefreshLoop() {
-  // 초기 지터: 0~REFRESH_JITTER 랜덤 지연 후 첫 갱신
-  var jitter = Math.floor(Math.random() * REFRESH_JITTER);
-  setTimeout(function tick() {
-    if (state.currentView === 'home') loadEvents();
-    // 다음 주기도 지터를 더해 300~500대 태블릿이 동시 히트하지 않도록 분산
+  // init() 에서 즉시 1회 loadEvents 하므로, 첫 tick 은 full interval + 지터 대기
+  // (부팅 직후 500대 이중 히트 방지)
+  function scheduleNext() {
     var nextDelay = REFRESH_INTERVAL + Math.floor(Math.random() * REFRESH_JITTER);
-    state.refreshTimer = setTimeout(tick, nextDelay);
-  }, jitter);
+    state.refreshTimer = setTimeout(function tick() {
+      if (state.currentView === 'home') loadEvents();
+      scheduleNext();
+    }, nextDelay);
+  }
+  scheduleNext();
 }
 
 // Service Worker 로만 keepalive (Supabase 핑 제거)
