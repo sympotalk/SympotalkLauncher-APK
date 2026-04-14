@@ -636,6 +636,18 @@
     <!-- 행사 목록 -->
     <section id="view-home" class="view active">
       <div class="page-content">
+        <!-- 네트워크 경고 배너 (오프라인일 때만 노출) -->
+        <div id="network-banner" style="display:none;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="font-size:20px">📶</div>
+            <div style="flex:1;font-size:13px;color:#fbbf24;line-height:1.5">
+              <strong>인터넷 연결 실패</strong><br>
+              <span id="network-banner-msg" style="color:#cbd5e1;font-weight:400">WiFi 연결을 확인해주세요</span>
+            </div>
+            <button class="btn-save" style="width:auto;padding:8px 12px;margin:0;background:#60a5fa" onclick="openWifiSettings()">📶 WiFi</button>
+          </div>
+        </div>
+
         <div class="refresh-bar">
           <h2>진행 예정 행사</h2>
           <button class="btn-refresh" onclick="loadEvents()">
@@ -788,6 +800,20 @@
               <button class="btn-save" style="flex:1;background:#475569;color:#e2e8f0" onclick="closeWifiPasswordModal()">취소</button>
               <button class="btn-save" style="flex:1" onclick="submitWifiPassword()">연결</button>
             </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">네트워크 진단</div>
+          <div class="settings-item">
+            <div class="settings-label">인터넷 연결 테스트</div>
+            <div class="settings-desc">
+              Supabase · GitHub · Cloudflare 에 접속 가능한지 확인합니다.
+            </div>
+            <button class="btn-save" onclick="runNetworkDiagnostic()" id="btn-net-diag">
+              🌐 연결 테스트 실행
+            </button>
+            <div id="net-diag-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
           </div>
         </div>
 
@@ -1303,13 +1329,45 @@ function loadEvents() {
   }).then(function(events) {
     spinner.style.display = 'none';
     renderEventList(events);
+    showNetworkBanner(false);   // 성공 시 배너 숨김
     var now = new Date();
     document.getElementById('last-refresh').textContent =
       '마지막 갱신: ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
   }).catch(function(err) {
     spinner.style.display = 'none';
-    container.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>불러오기 실패<br><small>' + (err.message || '') + '</small></div></div>';
+    var msg = err.message || '';
+    var isNetworkError = isNetworkFailure(msg);
+    if (isNetworkError) {
+      showNetworkBanner(true, '서버에 연결할 수 없습니다. WiFi 상태를 확인해주세요.');
+      container.innerHTML = '<div class="empty-msg"><div class="icon">📶</div><div style="line-height:1.6">인터넷 연결이 필요합니다<br><small style="color:#64748b">상단 WiFi 버튼 탭 → 연결 후 새로고침</small></div></div>';
+    } else {
+      container.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>불러오기 실패<br><small>' + escHtml(msg) + '</small></div></div>';
+    }
   });
+}
+
+// 네트워크 에러 감지 (DNS/오프라인/timeout)
+function isNetworkFailure(msg) {
+  if (!msg) return true;
+  var m = msg.toLowerCase();
+  return m.indexOf('failed to fetch') !== -1
+      || m.indexOf('unable to resolve') !== -1
+      || m.indexOf('no address associated') !== -1
+      || m.indexOf('networkerror') !== -1
+      || m.indexOf('timeout') !== -1
+      || m.indexOf('err_') !== -1
+      || m.indexOf('net::') !== -1;
+}
+
+function showNetworkBanner(show, msg) {
+  var banner = document.getElementById('network-banner');
+  if (!banner) return;
+  if (show) {
+    if (msg) document.getElementById('network-banner-msg').textContent = msg;
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 function getEventStatusInfo(event) {
@@ -1720,6 +1778,62 @@ function startRefreshLoop() {
 }
 
 /* ═══════════════════════════════════════════════════════
+   NETWORK DIAGNOSTIC
+═══════════════════════════════════════════════════════ */
+function runNetworkDiagnostic() {
+  var resultEl = document.getElementById('net-diag-result');
+  var btnEl = document.getElementById('btn-net-diag');
+  btnEl.disabled = true;
+  resultEl.innerHTML = '테스트 중...';
+
+  var targets = [
+    { name: 'Supabase',   url: SUPABASE_URL + '/rest/v1/' },
+    { name: 'GitHub API', url: 'https://api.github.com' },
+    { name: 'Cloudflare', url: 'https://sympotalklauncher-apk.pages.dev/version.txt?_=' + Date.now() }
+  ];
+
+  var results = [];
+  var completed = 0;
+
+  function render() {
+    var html = '';
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var icon = r.ok ? '✅' : '❌';
+      var color = r.ok ? '#22c55e' : '#ef4444';
+      html += '<div>' + icon + ' <strong style="color:' + color + '">' + r.name + '</strong>: ' +
+        (r.ok ? (r.time + 'ms') : escHtml(r.error || '실패')) + '</div>';
+    }
+    if (completed === targets.length) {
+      var allOk = results.every(function(r){ return r.ok; });
+      html += '<div style="margin-top:8px;padding:8px;border-radius:6px;background:' +
+        (allOk ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)') +
+        ';color:' + (allOk ? '#22c55e' : '#fbbf24') + '">' +
+        (allOk ? '✓ 모든 서비스에 정상 연결됩니다' :
+          '✗ 일부 서비스 연결 실패 — WiFi 상태와 공유기 인터넷 연결을 확인해주세요') +
+        '</div>';
+    }
+    resultEl.innerHTML = html;
+  }
+
+  targets.forEach(function(t, idx) {
+    var start = Date.now();
+    fetch(t.url, { method: 'GET', cache: 'no-store', mode: 'cors' })
+      .then(function(res) {
+        results[idx] = { name: t.name, ok: true, time: Date.now() - start };
+      })
+      .catch(function(err) {
+        results[idx] = { name: t.name, ok: false, error: err.message || '연결 실패' };
+      })
+      .finally(function() {
+        completed++;
+        render();
+        if (completed === targets.length) btnEl.disabled = false;
+      });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
    APP UPDATE (APK 자동 업데이트 - Native Bridge 연동)
 ═══════════════════════════════════════════════════════ */
 var pendingApkUrl = null;
@@ -1782,7 +1896,13 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
     statusEl.textContent = '✅ 최신 버전을 사용 중입니다';
     panelEl.style.display = 'none';
   } else {
-    statusEl.textContent = '❌ ' + (notes || '확인 실패');
+    // 네트워크 에러면 WiFi 버튼 제공
+    if (isNetworkFailure(notes || '')) {
+      statusEl.innerHTML = '📶 인터넷 연결 실패. WiFi 확인 후 다시 시도해주세요.' +
+        ' <button class="btn-save" style="margin-top:6px;width:auto;padding:6px 12px;background:#60a5fa" onclick="openWifiSettings()">WiFi 설정</button>';
+    } else {
+      statusEl.textContent = '❌ ' + (notes || '확인 실패');
+    }
     panelEl.style.display = 'none';
   }
 };
