@@ -8,10 +8,8 @@
     <path
         android:fillColor="#60a5fa"
         android:pathData="M54,22 C38,22 26,32 26,45 C26,55 33,62 45,65 L63,70 C70,72 74,76 74,82 C74,90 66,96 54,96 C42,96 34,90 32,81 L22,83 C25,96 38,105 54,105 C71,105 84,95 84,82 C84,71 77,64 64,61 L46,56 C39,54 36,50 36,44 C36,37 44,31 54,31 C64,31 71,36 73,44 L83,42 C80,30 68,22 54,22 Z"/>
-    <!-- 초록 점 -->
-    <circle
+    <!-- 초록 점 (circle → path 변환: cx=78, cy=30, r=7) -->
+    <path
         android:fillColor="#22c55e"
-        android:cx="78"
-        android:cy="30"
-        android:r="7"/>
+        android:pathData="M71,30 A7,7 0 1 0 85,30 A7,7 0 1 0 71,30 Z"/>
 </vector>
