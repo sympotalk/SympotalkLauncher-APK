@@ -772,11 +772,9 @@
             <input type="password" id="wifi-modal-password" class="settings-input"
               placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
               style="margin-bottom:6px">
-            <button id="btn-fill-default-pw" class="btn-save"
-              style="display:none;width:auto;padding:6px 12px;margin:0 0 10px 0;background:#334155;color:#93c5fd;font-size:12px;font-weight:500"
-              onclick="fillDefaultPassword()">
-              ⚡ 자주 쓰는 비밀번호 채우기
-            </button>
+            <div id="auto-fill-hint" style="display:none;font-size:11px;color:#93c5fd;margin-bottom:10px">
+              ⚡ 자주 쓰는 비밀번호가 자동 입력되었습니다
+            </div>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
               <input type="checkbox" id="wifi-show-password" onchange="toggleWifiPasswordVisible()">
               비밀번호 표시
@@ -891,7 +889,9 @@ var state = {
 var pendingWifi = null;      // {ssid, security} 비밀번호 입력 대기 중인 네트워크
 var wifiRefreshTimer = null;
 
-/* ── 자주 쓰는 WiFi 비밀번호 (localStorage) ── */
+/* ── 자주 쓰는 WiFi 비밀번호 (localStorage) ──
+ * NOTE: 키오스크 전용 단말 기준 평문 저장. 공용/분실 위험 단말에는 사용 금지.
+ */
 function getDefaultWifiPassword() {
   try { return localStorage.getItem('default_wifi_pw') || ''; } catch(e) { return ''; }
 }
@@ -912,13 +912,6 @@ function toggleDefaultPwVisible() {
   var checked = document.getElementById('default-pw-show').checked;
   input.type = checked ? 'text' : 'password';
 }
-function fillDefaultPassword() {
-  var pw = getDefaultWifiPassword();
-  if (pw) {
-    document.getElementById('wifi-modal-password').value = pw;
-  }
-}
-
 /* 스캔 결과 캐시 (저장 비밀번호 변경 시 UI 즉시 갱신) */
 var cachedScanResults = null;
 
@@ -1018,7 +1011,8 @@ function renderWifiList(networks) {
       signalIcon += '<span style="display:inline-block;width:3px;height:' + ((b+1)*3) + 'px;background:' + (b < bars ? '#60a5fa' : '#334155') + ';margin-right:1px;vertical-align:bottom;border-radius:1px"></span>';
     }
 
-    var netJson = JSON.stringify(n).replace(/"/g, '&quot;');
+    // HTML 속성 내 JSON 인라인: " 와 ' 모두 이스케이프 (SSID 에 ' 포함 방어)
+    var netJson = JSON.stringify(n).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     // 네트워크 행 (탭 시 비밀번호 모달)
     html += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
       '<button class="link-btn" style="flex:1;margin:0" onclick="selectWifi(' + netJson + ')">' +
@@ -1049,7 +1043,20 @@ function quickConnectWifi(network) {
     alert('자주 쓰는 비밀번호가 저장되어 있지 않습니다.');
     return;
   }
+  if (!checkWpa3Support(network)) return;
   connectWifiNow(network.ssid, pw, network.security);
+}
+
+// Android 9 는 WPA3 SAE 미지원 → 조기 경고
+function checkWpa3Support(network) {
+  var sec = (network.security || '').toUpperCase();
+  var caps = (network.capabilities || '').toUpperCase();
+  var isPureWpa3 = sec === 'WPA3' && !caps.includes('WPA2') && !caps.includes('RSN');
+  if (isPureWpa3) {
+    alert('이 기기는 WPA3 전용 네트워크를 지원하지 않습니다.\n(LG G Pad 5 / Android 9)\n시스템 WiFi 설정에서 연결을 시도해보세요.');
+    return false;
+  }
+  return true;
 }
 
 window.onWifiScanError = function(msg) {
@@ -1083,23 +1090,34 @@ function selectWifi(network) {
     return;
   }
 
+  // WPA3 전용 네트워크 조기 차단
+  if (!checkWpa3Support(network)) return;
+
   // 비밀번호 모달 표시
   document.getElementById('wifi-modal-ssid').textContent = network.ssid;
   var defaultPw = getDefaultWifiPassword();
   var pwInput = document.getElementById('wifi-modal-password');
-  pwInput.value = defaultPw || '';      // 저장된 비밀번호 자동 채움
+  pwInput.value = defaultPw || '';
   pwInput.type = 'password';
   document.getElementById('wifi-show-password').checked = false;
-  // "자주 쓰는 비밀번호 채우기" 버튼은 저장돼 있고 현재 필드가 비어있을 때만 노출
-  var fillBtn = document.getElementById('btn-fill-default-pw');
-  fillBtn.style.display = (defaultPw && !pwInput.value) ? 'inline-block' : 'none';
+  // 자동 채움 힌트는 저장된 비밀번호가 있을 때만 표시
+  document.getElementById('auto-fill-hint').style.display = defaultPw ? 'block' : 'none';
   document.getElementById('wifi-password-modal').style.display = 'flex';
   setTimeout(function() { pwInput.focus(); pwInput.select(); }, 100);
 }
 
 function closeWifiPasswordModal() {
   document.getElementById('wifi-password-modal').style.display = 'none';
+  // 비밀번호 필드 초기화 (다음 오픈 시 남지 않도록)
+  var pwInput = document.getElementById('wifi-modal-password');
+  if (pwInput) pwInput.value = '';
   pendingWifi = null;
+}
+
+function fillDefaultPassword() {
+  // deprecated: 자동 채움으로 대체됨 (v1.0.10+)
+  var pw = getDefaultWifiPassword();
+  if (pw) document.getElementById('wifi-modal-password').value = pw;
 }
 
 function toggleWifiPasswordVisible() {

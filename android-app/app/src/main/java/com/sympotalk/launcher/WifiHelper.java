@@ -276,7 +276,8 @@ public class WifiHelper {
         String sec = security == null ? "" : security.toUpperCase();
 
         if (sec.contains("WPA3")) {
-            // WPA3 SAE - Android 10+ 전용, Android 9에선 WPA2로 폴백
+            // WPA3 SAE - Android 9에선 SAE 미지원. Transition Mode AP 라면 WPA2 폴백 가능.
+            // Pure WPA3-only AP는 Android 9 에서 연결 불가 (UI 레이어에서 조기 차단 권장)
             config.preSharedKey = "\"" + password + "\"";
             config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
             config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
@@ -296,6 +297,7 @@ public class WifiHelper {
             config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
         } else if (sec.contains("WEP")) {
             // WEP - hex는 따옴표 없이, ASCII는 따옴표로 감싸기
+            // allowedProtocols는 설정하지 않음 (AOSP 참조 구현에 맞춤)
             boolean isHex = password != null
                 && (password.length() == 10 || password.length() == 26 || password.length() == 58)
                 && password.matches("[0-9A-Fa-f]+");
@@ -304,8 +306,6 @@ public class WifiHelper {
             config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
             config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
             config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
-            config.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
-            config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
             config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
             config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
         } else {
