@@ -1,0 +1,20 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  Access-Control-Allow-Origin: *
+
+/index.html
+  Cache-Control: public, max-age=60, must-revalidate
+
+/version.txt
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.js
+  Cache-Control: public, max-age=86400
+
+/*.json
+  Cache-Control: public, max-age=300

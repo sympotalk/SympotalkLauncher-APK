@@ -1,0 +1,133 @@
+name: Build APK & Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:   # 수동 실행 버튼
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Cloudflare Pages에 웹 앱 배포
+  # ─────────────────────────────────────────────
+  deploy-cloudflare:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: sympotalk-launcher
+          directory: .          # 루트의 index.html, version.txt, _headers 등 배포
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: '3'
+
+      - name: Print deployed URL
+        run: echo "Cloudflare URL → ${{ steps.deploy.outputs.url }}"
+
+  # ─────────────────────────────────────────────
+  # Job 2: Android APK 빌드
+  # ─────────────────────────────────────────────
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: deploy-cloudflare     # Cloudflare 배포 후 APK 빌드 (URL 반영)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      # 웹 파일(index.html 등)을 Android assets에 복사
+      - name: Copy web assets into Android project
+        run: |
+          ASSETS="android-app/app/src/main/assets/www"
+          mkdir -p "$ASSETS"
+          cp index.html manifest.json sw.js version.txt "$ASSETS/"
+          echo "Assets copied:"
+          ls -la "$ASSETS"
+
+      # Cloudflare URL을 build.gradle에 주입 (배포된 실제 URL)
+      - name: Inject Cloudflare URL into build.gradle
+        env:
+          CF_URL: ${{ needs.deploy-cloudflare.outputs.url }}
+        run: |
+          if [ -n "$CF_URL" ]; then
+            sed -i "s|https://sympotalk-launcher.pages.dev|${CF_URL}|g" \
+              android-app/app/build.gradle
+            echo "Cloudflare URL set to: $CF_URL"
+          fi
+
+      # Gradle wrapper 다운로드 (CI에서 jar 파일 자동 다운로드)
+      - name: Download Gradle wrapper jar
+        run: |
+          cd android-app
+          mkdir -p gradle/wrapper
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            "https://github.com/gradle/gradle/raw/v8.6.0/gradle/wrapper/gradle-wrapper.jar" || \
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            "https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradle/wrapper/gradle-wrapper.jar" || true
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android-app/**/*.gradle*', 'android-app/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Build debug APK
+        run: |
+          cd android-app
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Rename APK with version
+        run: |
+          VERSION=$(cat version.txt)
+          mkdir -p dist
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk \
+             "dist/SympotalkLauncher-v${VERSION}-debug.apk"
+          echo "APK_PATH=dist/SympotalkLauncher-v${VERSION}-debug.apk" >> $GITHUB_ENV
+          echo "APK_VERSION=${VERSION}" >> $GITHUB_ENV
+
+      # Artifacts에 APK 업로드 (Actions 탭에서 다운로드 가능)
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SympotalkLauncher-APK
+          path: ${{ env.APK_PATH }}
+          retention-days: 30
+
+      # 태그 푸시 시 GitHub Release에도 업로드
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_PATH }}
+          name: "Sympotalk Launcher ${{ env.APK_VERSION }}"
+          body: |
+            ## Sympotalk 런처 ${{ env.APK_VERSION }}
+
+            ### 설치 방법
+            1. 태블릿에서 **설정 → 보안 → 알 수 없는 소스** 허용
+            2. APK 파일 다운로드 후 설치
+            3. 앱 실행 후 **설정 탭**에서 참석자/운영자 링크 주소 입력
+
+            ### 업데이트 서버
+            - Cloudflare Pages: ${{ needs.deploy-cloudflare.outputs.url }}
+            - 앱 실행 시 자동으로 최신 버전 확인 및 적용

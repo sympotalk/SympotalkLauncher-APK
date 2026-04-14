@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.sympotalk.launcher'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.sympotalk.launcher"
+        minSdk 28          // Android 9 (LG G Pad 5)
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        // BuildConfig에 Cloudflare URL 포함
+        buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalk-launcher.pages.dev\""
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 릴리즈 서명: 아래 주석 해제 후 keystore 경로/비밀번호 설정
+            // signingConfig signingConfigs.release
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'   // WebView 최신 기능
+}

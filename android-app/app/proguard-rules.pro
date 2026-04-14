@@ -1,0 +1,2 @@
+-keep class com.sympotalk.launcher.** { *; }
+-keepattributes *Annotation*

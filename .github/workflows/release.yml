@@ -1,0 +1,11 @@
+name: Release APK (태그 푸시 시)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # v1.0.0, v1.2.3 형태의 태그
+
+jobs:
+  release:
+    uses: ./.github/workflows/build-and-deploy.yml
+    secrets: inherit
