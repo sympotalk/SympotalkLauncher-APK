@@ -1,6 +1,9 @@
 # Claude Code 내부 설정 (커밋 제외)
 .claude/
 
+# 중복 www/ 폴더 (루트 파일이 단일 소스)
+/www/
+
 # Android
 android-app/.gradle/
 android-app/local.properties

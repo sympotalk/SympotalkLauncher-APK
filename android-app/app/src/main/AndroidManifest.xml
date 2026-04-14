@@ -6,8 +6,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- WiFi 스캔/연결 (앱 내부에서 WiFi 목록 제어) -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- WiFi 스캔 결과를 받으려면 위치 권한 필요 (Android 9) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- 카메라 (WiFi QR 스캐너) -->
+    <!-- 카메라 (QR 링크 스캐너) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -37,11 +42,6 @@
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
-
-            <!-- 화면 항상 켜짐 (네이티브 레벨) -->
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/network_security_config" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

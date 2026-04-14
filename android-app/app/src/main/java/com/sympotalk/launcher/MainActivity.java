@@ -24,7 +24,9 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private PermissionRequest pendingPermission;
+    private WifiHelper wifiHelper;
     private static final int REQ_CAMERA = 1001;
+    private static final int REQ_LOCATION = 1002;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
         webView.setBackgroundColor(Color.parseColor("#0f172a"));
         setContentView(webView);
 
+        wifiHelper = new WifiHelper(this);
         setupWebView();
         checkCameraPermission();
         checkForUpdates();
@@ -90,8 +93,8 @@ public class MainActivity extends AppCompatActivity {
         // 오프라인 캐시 (setAppCacheEnabled는 API 33부터 제거됨. HTTP 캐시가 자동 사용됨)
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // 앱 식별 UA 추가
-        s.setUserAgentString(s.getUserAgentString() + " SympotalkLauncher/1.0");
+        // 앱 식별 UA 추가 (BuildConfig 에서 동적으로 버전 참조)
+        s.setUserAgentString(s.getUserAgentString() + " SympotalkLauncher/" + BuildConfig.VERSION_NAME);
 
         // ── JavaScript Bridge: JS에서 Android 기능 호출 가능 ──
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
@@ -217,6 +220,15 @@ public class MainActivity extends AppCompatActivity {
                 pendingPermission.deny();
             }
             pendingPermission = null;
+            return;
+        }
+        if (code == REQ_LOCATION) {
+            // 위치 권한 허용 시 WiFi 스캔 자동 재시도
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                jsCallback("window.refreshWifiList && refreshWifiList()");
+            } else {
+                jsCallback("window.onWifiScanError && onWifiScanError('위치 권한이 거부되었습니다')");
+            }
         }
     }
 
@@ -304,6 +316,90 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() ->
                 Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
         }
+
+        // ══════════════════════ WiFi 기능 ══════════════════════
+
+        /** WiFi 켜짐 여부 */
+        @JavascriptInterface
+        public boolean isWifiEnabled() {
+            return wifiHelper != null && wifiHelper.isWifiEnabled();
+        }
+
+        /** WiFi 켜기 시도 (Android 10+ 불가) */
+        @JavascriptInterface
+        public boolean enableWifi() {
+            return wifiHelper != null && wifiHelper.enableWifi();
+        }
+
+        /** 현재 연결된 WiFi SSID (없으면 빈 문자열) */
+        @JavascriptInterface
+        public String getCurrentSSID() {
+            String s = wifiHelper == null ? null : wifiHelper.getCurrentSSID();
+            return s == null ? "" : s;
+        }
+
+        /**
+         * WiFi 스캔. 결과는 window.onWifiScanResult(jsonArrayString) 로 비동기 콜백
+         * 실패 시 window.onWifiScanError(message)
+         */
+        @JavascriptInterface
+        public void startWifiScan() {
+            // 위치 권한 필수
+            if (ContextCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> {
+                    ActivityCompat.requestPermissions(MainActivity.this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                        REQ_LOCATION);
+                    jsCallback("window.onWifiScanError && onWifiScanError('위치 권한을 허용하면 다시 시도해주세요')");
+                });
+                return;
+            }
+
+            wifiHelper.scanNetworks(new WifiHelper.ScanCallback() {
+                @Override public void onScanComplete(String jsonResults) {
+                    jsCallback("window.onWifiScanResult && onWifiScanResult(" +
+                        jsonStringify(jsonResults) + ")");
+                }
+                @Override public void onScanFailed(String reason) {
+                    jsCallback("window.onWifiScanError && onWifiScanError(" +
+                        jsonStringify(reason) + ")");
+                }
+            });
+        }
+
+        /**
+         * WiFi 네트워크 연결. 결과는 window.onWifiConnectResult(success, message) 로 콜백
+         */
+        @JavascriptInterface
+        public void connectWifi(String ssid, String password, String security) {
+            wifiHelper.connectToNetwork(ssid, password, security,
+                new WifiHelper.ConnectCallback() {
+                    @Override
+                    public void onConnectResult(boolean success, String message) {
+                        jsCallback("window.onWifiConnectResult && onWifiConnectResult(" +
+                            success + "," + jsonStringify(message) + ")");
+                    }
+                });
+        }
+    }
+
+    // ─── JS 콜백 헬퍼 ───
+    private void jsCallback(final String jsSnippet) {
+        runOnUiThread(() -> {
+            if (webView != null) webView.evaluateJavascript(jsSnippet, null);
+        });
+    }
+
+    /** JS string literal 로 안전하게 인코딩 (quoted) */
+    private static String jsonStringify(String s) {
+        if (s == null) return "null";
+        // JSON string 이미 배열/객체면 그대로 사용
+        String trimmed = s.trim();
+        if (trimmed.startsWith("[") || trimmed.startsWith("{")) return s;
+        // 아니면 문자열로 quote
+        return org.json.JSONObject.quote(s);
     }
 
     @Override

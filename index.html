@@ -319,74 +319,7 @@
       gap: 8px;
     }
 
-    /* ─── Browser View ─────────────────────────────────── */
-    #view-browser {
-      background: #000;
-      flex-direction: column;
-    }
-    #view-browser.active { display: flex; }
-    #browser-bar {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      padding: 6px 10px;
-      background: #1e293b;
-      border-bottom: 1px solid #334155;
-      gap: 8px;
-    }
-    #browser-url {
-      flex: 1;
-      font-size: 12px;
-      color: #64748b;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding: 6px 10px;
-      background: #0f172a;
-      border-radius: 6px;
-    }
-    #browser-home-btn {
-      padding: 7px 14px;
-      background: #ef4444;
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    #browser-frame {
-      flex: 1;
-      border: none;
-      width: 100%;
-      background: #fff;
-    }
-    #browser-error {
-      display: none;
-      flex: 1;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      padding: 40px;
-      text-align: center;
-      color: #94a3b8;
-    }
-    #browser-error.show { display: flex; }
-    #browser-error .err-icon { font-size: 48px; }
-    #browser-open-btn {
-      padding: 12px 24px;
-      background: #3b82f6;
-      border: none;
-      border-radius: 10px;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    /* ─── WiFi QR Scanner ──────────────────────────────── */
+    /* ─── QR Scanner ───────────────────────────────────── */
     #view-wifi {
       background: #0f172a;
       flex-direction: column;
@@ -734,20 +667,6 @@
       </div>
     </section>
 
-    <!-- 내장 브라우저 -->
-    <section id="view-browser" class="view">
-      <div id="browser-bar">
-        <button id="browser-home-btn" onclick="closeBrowser()">✕ 홈</button>
-        <div id="browser-url">-</div>
-      </div>
-      <div id="browser-error">
-        <div class="err-icon">🔗</div>
-        <div>이 페이지는 내장 브라우저에서 열 수 없습니다.<br>외부 브라우저로 열겠습니까?</div>
-        <button id="browser-open-btn" onclick="openExternal()">외부 브라우저로 열기</button>
-      </div>
-      <iframe id="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation" allowfullscreen></iframe>
-    </section>
-
     <!-- QR 링크 스캐너 -->
     <section id="view-wifi" class="view">
       <div id="wifi-content">
@@ -802,15 +721,45 @@
       <div class="page-content">
 
         <div class="settings-group">
-          <div class="settings-group-title">네트워크</div>
+          <div class="settings-group-title">네트워크 (WiFi)</div>
+
           <div class="settings-item">
-            <div class="settings-label">WiFi 설정</div>
-            <div class="settings-desc">
-              태블릿의 WiFi 설정 화면을 엽니다. 행사장 공유기에 연결할 때 사용하세요.
+            <div class="settings-label">현재 연결</div>
+            <div id="current-wifi" style="font-size:15px;font-weight:600;color:#22c55e;padding:8px 0">
+              -
             </div>
-            <button class="btn-save" onclick="openWifiSettings()">
-              📶 WiFi 설정 열기
-            </button>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button class="btn-save" style="flex:1" onclick="refreshWifiList()">
+                🔍 주변 WiFi 스캔
+              </button>
+              <button class="btn-save" style="flex:1;background:#334155;color:#e2e8f0" onclick="openWifiSettings()">
+                ⚙️ 시스템 설정
+              </button>
+            </div>
+            <div id="wifi-scan-status" style="font-size:12px;color:#64748b;margin-top:8px;text-align:center"></div>
+          </div>
+
+          <!-- 주변 WiFi 목록 -->
+          <div id="wifi-list" style="display:none;margin-top:8px"></div>
+        </div>
+
+        <!-- WiFi 비밀번호 입력 모달 -->
+        <div id="wifi-password-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
+            <div style="font-size:14px;color:#64748b;margin-bottom:4px">연결할 네트워크</div>
+            <div id="wifi-modal-ssid" style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:14px">-</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:6px">비밀번호</div>
+            <input type="password" id="wifi-modal-password" class="settings-input"
+              placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
+              style="margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
+              <input type="checkbox" id="wifi-show-password" onchange="toggleWifiPasswordVisible()">
+              비밀번호 표시
+            </label>
+            <div style="display:flex;gap:8px">
+              <button class="btn-save" style="flex:1;background:#475569;color:#e2e8f0" onclick="closeWifiPasswordModal()">취소</button>
+              <button class="btn-save" style="flex:1" onclick="submitWifiPassword()">연결</button>
+            </div>
           </div>
         </div>
 
@@ -830,7 +779,7 @@
           <div class="settings-group-title">앱 정보</div>
           <div class="info-box">
             <strong>Sympotalk 행사 런처</strong><br>
-            링크 기본 주소: <strong>https://sympopad.com</strong><br>
+            링크 기본 주소: <strong id="app-base-url">-</strong><br>
             Supabase: sympotalkv2<br>
             버전: <span id="app-version">-</span><br>
             실행 환경: <span id="app-env">웹</span>
@@ -909,18 +858,170 @@ var state = {
 };
 
 /* ═══════════════════════════════════════════════════════
-   WIFI SETTINGS (Android Bridge)
+   WIFI MANAGEMENT (Android Bridge)
+   - APK: 앱 내부에서 주변 WiFi 스캔 + 비밀번호 입력 후 연결 가능
+   - 웹: 시스템 설정 안내만 표시
 ═══════════════════════════════════════════════════════ */
+
+var pendingWifi = null;      // {ssid, security} 비밀번호 입력 대기 중인 네트워크
+var wifiRefreshTimer = null;
+
 function openWifiSettings() {
-  // APK 환경: Native Android WiFi 설정 앱 열기
   if (hasNativeBridge && typeof AndroidBridge.openWifiSettings === 'function') {
-    try {
-      AndroidBridge.openWifiSettings();
-      return;
-    } catch(e) {}
+    try { AndroidBridge.openWifiSettings(); return; } catch(e) {}
   }
-  // 웹 환경: 안내만 표시
-  alert('태블릿 홈 화면에서 설정 → 네트워크 및 인터넷 → WiFi 에서 설정하세요.\n\n(APK 설치 시 이 버튼으로 바로 WiFi 설정이 열립니다)');
+  alert('태블릿 홈 → 설정 → 네트워크 및 인터넷 → WiFi 에서 설정하세요.');
+}
+
+function updateCurrentWifi() {
+  var el = document.getElementById('current-wifi');
+  if (!el) return;
+  if (hasNativeBridge && typeof AndroidBridge.getCurrentSSID === 'function') {
+    var ssid = '';
+    try { ssid = AndroidBridge.getCurrentSSID(); } catch(e) {}
+    el.textContent = ssid ? '✅ ' + ssid : '(연결된 WiFi 없음)';
+    el.style.color = ssid ? '#22c55e' : '#64748b';
+  } else {
+    el.textContent = '(웹 브라우저 환경)';
+    el.style.color = '#64748b';
+  }
+}
+
+function refreshWifiList() {
+  var statusEl = document.getElementById('wifi-scan-status');
+  var listEl = document.getElementById('wifi-list');
+
+  if (!hasNativeBridge || typeof AndroidBridge.startWifiScan !== 'function') {
+    statusEl.textContent = 'APK 환경에서만 사용 가능합니다';
+    return;
+  }
+
+  if (!AndroidBridge.isWifiEnabled()) {
+    statusEl.innerHTML = '⚠️ WiFi가 꺼져 있습니다. <a href="#" onclick="openWifiSettings();return false" style="color:#60a5fa">시스템 설정</a>에서 켜주세요.';
+    return;
+  }
+
+  statusEl.textContent = '🔍 주변 WiFi 검색 중...';
+  listEl.style.display = 'none';
+  try { AndroidBridge.startWifiScan(); } catch(e) {
+    statusEl.textContent = '스캔 실패: ' + e.message;
+  }
+}
+
+// Native → JS 콜백 (WebView.evaluateJavascript 로 호출됨)
+window.onWifiScanResult = function(jsonArrayOrString) {
+  var networks;
+  try {
+    networks = (typeof jsonArrayOrString === 'string')
+      ? JSON.parse(jsonArrayOrString) : jsonArrayOrString;
+  } catch(e) { networks = []; }
+
+  var statusEl = document.getElementById('wifi-scan-status');
+  var listEl = document.getElementById('wifi-list');
+
+  if (!networks || networks.length === 0) {
+    statusEl.textContent = '주변 WiFi를 찾을 수 없습니다';
+    listEl.style.display = 'none';
+    return;
+  }
+
+  statusEl.textContent = networks.length + '개 네트워크 발견';
+
+  var html = '';
+  for (var i = 0; i < networks.length; i++) {
+    var n = networks[i];
+    var bars = n.signalBars || 0;
+    var isSecure = n.security && n.security !== 'NONE';
+    var signalIcon = '';
+    for (var b = 0; b < 4; b++) {
+      signalIcon += '<span style="display:inline-block;width:3px;height:' + ((b+1)*3) + 'px;background:' + (b < bars ? '#60a5fa' : '#334155') + ';margin-right:1px;vertical-align:bottom;border-radius:1px"></span>';
+    }
+    html += '<button class="link-btn" style="width:100%" onclick="selectWifi(' +
+      JSON.stringify(n).replace(/"/g, '&quot;') + ')">' +
+      '<div style="display:flex;align-items:center;gap:10px;width:100%">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(n.ssid) + '</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:2px">' + n.security + (isSecure ? ' 🔒' : ' 🔓') + ' · ' + n.level + ' dBm</div>' +
+        '</div>' +
+        '<div style="flex-shrink:0">' + signalIcon + '</div>' +
+      '</div>' +
+    '</button>';
+  }
+  listEl.innerHTML = html;
+  listEl.style.display = 'block';
+};
+
+window.onWifiScanError = function(msg) {
+  var statusEl = document.getElementById('wifi-scan-status');
+  if (statusEl) statusEl.textContent = '❌ ' + msg;
+};
+
+window.onWifiConnectResult = function(success, msg) {
+  var statusEl = document.getElementById('wifi-scan-status');
+  closeWifiPasswordModal();
+  if (success) {
+    showToast('WiFi 연결 시도 중: ' + (msg || ''));
+    if (statusEl) statusEl.textContent = '✅ ' + (msg || '연결됨');
+    // 3초 후 현재 연결 상태 갱신
+    setTimeout(updateCurrentWifi, 3500);
+    setTimeout(refreshWifiList, 3500);
+  } else {
+    if (statusEl) statusEl.textContent = '❌ ' + (msg || '연결 실패');
+  }
+};
+
+function selectWifi(network) {
+  pendingWifi = network;
+  var security = network.security || 'NONE';
+
+  // 보안 없는 open 네트워크는 바로 연결
+  if (security === 'NONE') {
+    if (confirm('"' + network.ssid + '" 네트워크에 연결하시겠습니까? (비밀번호 없음)')) {
+      connectWifiNow(network.ssid, '', 'NONE');
+    }
+    return;
+  }
+
+  // 비밀번호 모달 표시
+  document.getElementById('wifi-modal-ssid').textContent = network.ssid;
+  document.getElementById('wifi-modal-password').value = '';
+  document.getElementById('wifi-show-password').checked = false;
+  document.getElementById('wifi-modal-password').type = 'password';
+  document.getElementById('wifi-password-modal').style.display = 'flex';
+  setTimeout(function() {
+    document.getElementById('wifi-modal-password').focus();
+  }, 100);
+}
+
+function closeWifiPasswordModal() {
+  document.getElementById('wifi-password-modal').style.display = 'none';
+  pendingWifi = null;
+}
+
+function toggleWifiPasswordVisible() {
+  var input = document.getElementById('wifi-modal-password');
+  var checked = document.getElementById('wifi-show-password').checked;
+  input.type = checked ? 'text' : 'password';
+}
+
+function submitWifiPassword() {
+  if (!pendingWifi) return;
+  var pw = document.getElementById('wifi-modal-password').value;
+  if (!pw) {
+    alert('비밀번호를 입력해주세요');
+    return;
+  }
+  connectWifiNow(pendingWifi.ssid, pw, pendingWifi.security);
+}
+
+function connectWifiNow(ssid, password, security) {
+  var statusEl = document.getElementById('wifi-scan-status');
+  statusEl.textContent = '🔐 ' + ssid + ' 연결 시도 중...';
+  try {
+    AndroidBridge.connectWifi(ssid, password, security || 'WPA');
+  } catch(e) {
+    statusEl.textContent = '연결 실패: ' + e.message;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -929,16 +1030,11 @@ function openWifiSettings() {
 function showView(name) {
   if (name === state.currentView) return;
 
-  // WiFi 스캐너 중지
+  // QR 스캐너 중지
   if (state.currentView === 'wifi') stopQRScan();
 
-  // 브라우저 뷰 종료
-  if (state.currentView === 'browser' && name !== 'browser') {
-    closeBrowserFrame();
-  }
-
-  // 이전 뷰 기록 (detail/browser 전용 back 버튼)
-  if (name === 'detail' || name === 'browser') {
+  // 이전 뷰 기록 (detail 전용 back 버튼)
+  if (name === 'detail') {
     state.prevView = state.currentView;
   }
 
@@ -973,13 +1069,12 @@ function showView(name) {
   var titleEl = document.getElementById('topbar-title');
   var titles = { home: '행사 런처', wifi: 'QR 스캔', settings: '설정', detail: '행사 상세', browser: '' };
   titleEl.textContent = titles[name] || '';
+
+  // 설정 탭 진입 시 현재 WiFi 상태 갱신
+  if (name === 'settings') updateCurrentWifi();
 }
 
 function handleBack() {
-  if (state.currentView === 'browser') {
-    closeBrowser();
-    return;
-  }
   if (state.currentView === 'detail') {
     showView(state.prevView || 'home');
     return;
@@ -1229,11 +1324,7 @@ function openLink(encodedUrl) {
   window.location.href = url;
 }
 
-function closeBrowserFrame() { /* deprecated — iframe 제거됨 */ }
-function closeBrowser() { showView('home'); }
-function openExternal() {
-  if (state.browserUrl) window.open(state.browserUrl, '_blank');
-}
+/* iframe 기반 내장 브라우저는 v1.0.3에서 제거됨. window.location.href 로 직접 네비게이션 */
 
 /* ═══════════════════════════════════════════════════════
    WIFI QR SCANNER
@@ -1530,6 +1621,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // 실행 환경 표시 (APK vs 웹)
   var envEl = document.getElementById('app-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
+
+  // BASE_URL 변수를 UI에 주입 (하드코딩 방지)
+  var baseEl = document.getElementById('app-base-url');
+  if (baseEl) baseEl.textContent = BASE_URL;
 
   // 버전 표시 (version.txt 동적 로드)
   // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용

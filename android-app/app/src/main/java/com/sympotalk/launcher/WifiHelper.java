@@ -1,0 +1,261 @@
+package com.sympotalk.launcher;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * Android 9 (LG G Pad 5) 전용 WiFi 스캔/연결 헬퍼
+ * - WifiManager.addNetwork() + enableNetwork() 레거시 API 사용
+ * - Android 10+ 에서는 동작 제한될 수 있음 (타겟 기기는 Android 9)
+ */
+public class WifiHelper {
+    private static final String TAG = "WifiHelper";
+
+    public interface ScanCallback {
+        void onScanComplete(String jsonResults);
+        void onScanFailed(String reason);
+    }
+
+    public interface ConnectCallback {
+        void onConnectResult(boolean success, String message);
+    }
+
+    private final Context context;
+    private final WifiManager wifiManager;
+    private BroadcastReceiver scanReceiver;
+
+    public WifiHelper(Context context) {
+        this.context = context.getApplicationContext();
+        this.wifiManager = (WifiManager) this.context.getSystemService(Context.WIFI_SERVICE);
+    }
+
+    public boolean isWifiEnabled() {
+        return wifiManager != null && wifiManager.isWifiEnabled();
+    }
+
+    public boolean enableWifi() {
+        if (wifiManager == null) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ 에서는 앱이 직접 WiFi 토글 불가 → 사용자가 시스템에서 켜야 함
+            return false;
+        }
+        try {
+            return wifiManager.setWifiEnabled(true);
+        } catch (Exception e) {
+            Log.w(TAG, "enableWifi 실패: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** 현재 연결된 WiFi SSID 반환 (없으면 null) */
+    public String getCurrentSSID() {
+        try {
+            WifiInfo info = wifiManager.getConnectionInfo();
+            if (info == null) return null;
+            String ssid = info.getSSID();
+            if (ssid == null || ssid.equals("<unknown ssid>")) return null;
+            // 따옴표 제거
+            if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                ssid = ssid.substring(1, ssid.length() - 1);
+            }
+            return ssid;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 주변 WiFi 네트워크 스캔 (비동기) */
+    public void scanNetworks(final ScanCallback callback) {
+        if (wifiManager == null) {
+            callback.onScanFailed("WiFi 관리자 사용 불가");
+            return;
+        }
+        if (!wifiManager.isWifiEnabled()) {
+            callback.onScanFailed("WiFi가 꺼져 있습니다");
+            return;
+        }
+
+        // 기존 리시버 정리
+        unregisterScanReceiver();
+
+        // 중복 콜백 방지용 플래그
+        final AtomicBoolean delivered = new AtomicBoolean(false);
+
+        scanReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                if (!delivered.compareAndSet(false, true)) return; // 이미 전달됨
+                try {
+                    List<ScanResult> results = wifiManager.getScanResults();
+                    callback.onScanComplete(scanResultsToJson(results));
+                } catch (SecurityException se) {
+                    callback.onScanFailed("위치 권한이 필요합니다: " + se.getMessage());
+                } catch (Exception e) {
+                    callback.onScanFailed("스캔 결과 조회 실패: " + e.getMessage());
+                } finally {
+                    unregisterScanReceiver();
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        context.registerReceiver(scanReceiver, filter);
+
+        boolean started;
+        try {
+            started = wifiManager.startScan();
+        } catch (Exception e) {
+            unregisterScanReceiver();
+            if (delivered.compareAndSet(false, true)) {
+                callback.onScanFailed("스캔 시작 실패: " + e.getMessage());
+            }
+            return;
+        }
+
+        // Android 9+ startScan 은 throttle 걸려 false 반환할 수 있음 → 캐시된 결과라도 반환
+        if (!started) {
+            try {
+                List<ScanResult> cached = wifiManager.getScanResults();
+                if (cached != null && !cached.isEmpty() && delivered.compareAndSet(false, true)) {
+                    callback.onScanComplete(scanResultsToJson(cached));
+                    unregisterScanReceiver();
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void unregisterScanReceiver() {
+        if (scanReceiver != null) {
+            try { context.unregisterReceiver(scanReceiver); } catch (Exception ignored) {}
+            scanReceiver = null;
+        }
+    }
+
+    private String scanResultsToJson(List<ScanResult> results) {
+        JSONArray arr = new JSONArray();
+        if (results == null) return arr.toString();
+
+        // 중복 SSID 제거 (signal 강한 것만 유지)
+        java.util.Map<String, ScanResult> uniq = new java.util.HashMap<>();
+        for (ScanResult r : results) {
+            if (r.SSID == null || r.SSID.isEmpty()) continue;
+            ScanResult prev = uniq.get(r.SSID);
+            if (prev == null || r.level > prev.level) uniq.put(r.SSID, r);
+        }
+
+        // 신호 강도 내림차순 정렬
+        java.util.List<ScanResult> sorted = new java.util.ArrayList<>(uniq.values());
+        java.util.Collections.sort(sorted, new java.util.Comparator<ScanResult>() {
+            @Override public int compare(ScanResult a, ScanResult b) { return b.level - a.level; }
+        });
+
+        try {
+            for (ScanResult r : sorted) {
+                JSONObject o = new JSONObject();
+                o.put("ssid", r.SSID);
+                o.put("bssid", r.BSSID);
+                o.put("level", r.level);            // dBm
+                o.put("frequency", r.frequency);    // MHz
+                o.put("capabilities", r.capabilities);
+                o.put("security", detectSecurity(r.capabilities));
+                // 신호 강도 0-4 단계
+                o.put("signalBars", WifiManager.calculateSignalLevel(r.level, 5));
+                arr.put(o);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "JSON 변환 실패: " + e.getMessage());
+        }
+        return arr.toString();
+    }
+
+    private String detectSecurity(String capabilities) {
+        if (capabilities == null) return "NONE";
+        String c = capabilities.toUpperCase();
+        if (c.contains("WPA3")) return "WPA3";
+        if (c.contains("WPA2")) return "WPA2";
+        if (c.contains("WPA"))  return "WPA";
+        if (c.contains("WEP"))  return "WEP";
+        if (c.contains("EAP"))  return "EAP";
+        return "NONE";
+    }
+
+    /** WiFi 네트워크 연결 (Android 9 legacy API) */
+    public void connectToNetwork(final String ssid, final String password, final String security,
+                                 final ConnectCallback callback) {
+        if (wifiManager == null) {
+            callback.onConnectResult(false, "WiFi 관리자 사용 불가");
+            return;
+        }
+        if (!wifiManager.isWifiEnabled()) {
+            callback.onConnectResult(false, "WiFi를 먼저 켜주세요");
+            return;
+        }
+
+        // Android 10+ 에서는 레거시 API 제한적 → 시스템 설정으로 유도
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            callback.onConnectResult(false, "Android 10 이상에서는 시스템 WiFi 설정을 이용해주세요");
+            return;
+        }
+
+        try {
+            WifiConfiguration config = new WifiConfiguration();
+            config.SSID = "\"" + ssid + "\"";
+
+            String sec = security == null ? "" : security.toUpperCase();
+            if (sec.contains("WPA")) {
+                config.preSharedKey = "\"" + password + "\"";
+            } else if (sec.contains("WEP")) {
+                config.wepKeys[0] = "\"" + password + "\"";
+                config.wepTxKeyIndex = 0;
+                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                config.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+            } else {
+                // Open network
+                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+            }
+
+            // 기존에 동일 SSID 설정이 있으면 제거
+            List<WifiConfiguration> existing = null;
+            try { existing = wifiManager.getConfiguredNetworks(); } catch (Exception ignored) {}
+            if (existing != null) {
+                for (WifiConfiguration ex : existing) {
+                    if (ex.SSID != null && ex.SSID.equals(config.SSID)) {
+                        wifiManager.removeNetwork(ex.networkId);
+                    }
+                }
+            }
+
+            int networkId = wifiManager.addNetwork(config);
+            if (networkId == -1) {
+                callback.onConnectResult(false, "네트워크 추가 실패");
+                return;
+            }
+
+            wifiManager.disconnect();
+            boolean enabled = wifiManager.enableNetwork(networkId, true);
+            wifiManager.reconnect();
+
+            if (enabled) {
+                callback.onConnectResult(true, ssid + " 연결 시도 중...");
+            } else {
+                callback.onConnectResult(false, "네트워크 활성화 실패");
+            }
+        } catch (Exception e) {
+            callback.onConnectResult(false, "오류: " + e.getMessage());
+        }
+    }
+}

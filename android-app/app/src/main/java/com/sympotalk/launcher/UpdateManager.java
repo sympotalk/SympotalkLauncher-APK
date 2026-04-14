@@ -95,7 +95,7 @@ public class UpdateManager {
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setConnectTimeout(TIMEOUT_CONNECT);
         conn.setReadTimeout(TIMEOUT_READ);
-        conn.setRequestProperty("User-Agent", "SympotalkLauncher/1.0 Android");
+        conn.setRequestProperty("User-Agent", "SympotalkLauncher/" + BuildConfig.VERSION_NAME + " Android");
         conn.connect();
 
         if (conn.getResponseCode() != 200) {
