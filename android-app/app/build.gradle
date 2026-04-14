@@ -10,8 +10,8 @@ android {
         applicationId "com.sympotalk.launcher"
         minSdk 28          // Android 9 (LG G Pad 5)
         targetSdk 34
-        versionCode 7
-        versionName "1.0.11"
+        versionCode 8
+        versionName "1.0.12"
 
         // BuildConfig에 Cloudflare URL + GitHub 저장소 정보
         buildConfigField "String", "CLOUDFLARE_URL", "\"https://sympotalklauncher-apk.pages.dev\""
@@ -19,6 +19,7 @@ android {
     }
 
     // 공용 release keystore 로 서명 → 매번 동일 서명 → 삭제 없이 업데이트 가능
+    // keystore 가 없으면 경고 출력 (설치 시 APK 업데이트 불가능해짐)
     signingConfigs {
         release {
             def ksFile = file('release.keystore')
@@ -27,6 +28,14 @@ android {
                 storePassword System.getenv("KEYSTORE_PASSWORD") ?: 'sympotalk-launcher-2026'
                 keyAlias System.getenv("KEY_ALIAS") ?: 'sympotalk'
                 keyPassword System.getenv("KEY_PASSWORD") ?: 'sympotalk-launcher-2026'
+            } else {
+                println "========================================================"
+                println "⚠️  WARNING: android-app/release.keystore 가 없습니다!"
+                println "⚠️  APK 가 자동 생성 debug keystore 로 서명됩니다."
+                println "⚠️  이 APK 는 '서명 불일치' 오류로 기존 앱을 업데이트 할 수 없습니다."
+                println "⚠️"
+                println "⚠️  해결: GitHub Actions 에서 'Setup Signing Keystore' 워크플로를 먼저 실행하세요."
+                println "========================================================"
             }
         }
     }

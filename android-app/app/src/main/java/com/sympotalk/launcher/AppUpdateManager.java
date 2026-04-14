@@ -8,7 +8,6 @@ import android.content.IntentFilter;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Environment;
 import android.util.Log;
 
 import androidx.core.content.FileProvider;
@@ -172,13 +171,16 @@ public class AppUpdateManager {
                         }
                     } catch (Exception e) {
                         callback.onDownloadFailed("오류: " + e.getMessage());
+                    } finally {
+                        currentDownloadId = -1;   // 완료/실패 시 ID 리셋
                     }
                 }
             };
 
             IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(downloadReceiver, filter, Context.RECEIVER_EXPORTED);
+                // DownloadManager 는 시스템 → 앱 브로드캐스트라 NOT_EXPORTED 가 적절
+                context.registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
                 context.registerReceiver(downloadReceiver, filter);
             }

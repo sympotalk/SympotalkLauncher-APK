@@ -28,6 +28,17 @@ jobs:
           gradle-version: '8.6'
           cache-read-only: false
 
+      # keystore 존재 여부 확인 (없으면 서명 불일치 → 업데이트 불가)
+      - name: Check signing keystore
+        run: |
+          if [ -f android-app/release.keystore ]; then
+            echo "::notice::✅ release.keystore found - APK will be consistently signed"
+          else
+            echo "::warning::⚠️ release.keystore NOT FOUND!"
+            echo "::warning::APK will use auto-generated debug keystore (inconsistent signing)."
+            echo "::warning::Run the 'Setup Signing Keystore' workflow first for installable updates."
+          fi
+
       # 웹 파일을 Android assets 에 복사 (번들 기본 버전)
       - name: Copy web assets into Android project
         run: |
