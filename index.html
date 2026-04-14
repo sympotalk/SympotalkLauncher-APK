@@ -349,7 +349,14 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      background: #000;
+      /* 플레이 버튼 오버레이 제거 (WebKit/Blink) */
+      -webkit-media-controls: none;
+      visibility: hidden;         /* 스트림 준비 전까지 숨김 */
     }
+    #qr-video.ready { visibility: visible; }
+    #qr-video::-webkit-media-controls-start-playback-button { display: none !important; }
+    #qr-video::-webkit-media-controls { display: none !important; }
     #qr-canvas { display: none; }
     .scan-overlay {
       position: absolute;
@@ -671,7 +678,7 @@
     <section id="view-wifi" class="view">
       <div id="wifi-content">
         <div id="scanner-container" style="display:none">
-          <video id="qr-video" playsinline muted autoplay></video>
+          <video id="qr-video" playsinline muted webkit-playsinline disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
           <canvas id="qr-canvas"></canvas>
           <div class="scan-overlay">
             <div class="scan-frame">
@@ -1113,12 +1120,21 @@ window.onWifiConnectResult = function(success, msg) {
   if (success) {
     showToast('WiFi 연결 시도 중: ' + (msg || ''));
     if (statusEl) statusEl.textContent = '✅ ' + (msg || '연결됨');
-    // 3초 후 현재 연결 상태 갱신
     setTimeout(updateCurrentWifi, 3500);
     setTimeout(refreshWifiList, 3500);
-  } else {
-    if (statusEl) statusEl.textContent = '❌ ' + (msg || '연결 실패');
+    return;
   }
+  // 시스템에 이미 저장된 프로필 충돌 → 시스템 설정으로 유도
+  if (msg && msg.indexOf('SYSTEM_PROFILE_EXISTS|') === 0) {
+    var conflictSsid = msg.split('|')[1] || '';
+    if (statusEl) {
+      statusEl.innerHTML = '⚠️ "<strong>' + escHtml(conflictSsid) + '</strong>"가 이미 시스템에 저장되어 있습니다.<br>' +
+        '<button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:8px 14px;width:auto" ' +
+        'onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정에서 연결</button>';
+    }
+    return;
+  }
+  if (statusEl) statusEl.textContent = '❌ ' + (msg || '연결 실패');
 };
 
 function selectWifi(network) {
@@ -1136,17 +1152,17 @@ function selectWifi(network) {
   // WPA3 전용 네트워크 조기 차단
   if (!checkWpa3Support(network)) return;
 
-  // 비밀번호 모달 표시
+  // 비밀번호 모달 표시 (가상키보드 자동 활성화 방지 — 사용자가 입력칸을 탭해야 키보드 출현)
   document.getElementById('wifi-modal-ssid').textContent = network.ssid;
   var defaultPw = getDefaultWifiPassword();
   var pwInput = document.getElementById('wifi-modal-password');
   pwInput.value = defaultPw || '';
   pwInput.type = 'password';
+  pwInput.blur();          // 혹시 이전 포커스가 남아있으면 해제
   document.getElementById('wifi-show-password').checked = false;
-  // 자동 채움 힌트는 저장된 비밀번호가 있을 때만 표시
   document.getElementById('auto-fill-hint').style.display = defaultPw ? 'block' : 'none';
   document.getElementById('wifi-password-modal').style.display = 'flex';
-  setTimeout(function() { pwInput.focus(); pwInput.select(); }, 100);
+  // focus() / select() 호출하지 않음 — 키보드는 입력칸 탭 시에만 표시
 }
 
 function closeWifiPasswordModal() {
@@ -1303,30 +1319,23 @@ function loadEvents() {
 }
 
 function getEventStatusInfo(event) {
-  var today = new Date();
-  var y = today.getFullYear();
-  var m = String(today.getMonth() + 1).padStart(2, '0');
-  var d = String(today.getDate()).padStart(2, '0');
-  var todayStr = y + '-' + m + '-' + d;
-
-  var start = event.start_date;
-  var end = event.end_date || start;
-
-  // 오늘 날짜가 행사 기간 내
-  if (start && end && start <= todayStr && todayStr <= end) {
-    return { label: '진행중', cls: 'status-active' };
+  // Supabase admin 과 동일하게 status 컬럼을 단일 진실로 사용
+  // (관리자가 admin 에서 draft/active/closed 로 수동 관리하므로 앱도 이를 따름)
+  var status = (event.status || '').toLowerCase();
+  switch (status) {
+    case 'active':
+      return { label: '진행중', cls: 'status-active' };
+    case 'closed':
+    case 'ended':
+    case 'completed':
+      return { label: '종료', cls: 'status-ended' };
+    case 'draft':
+    case 'scheduled':
+    case 'upcoming':
+      return { label: '예정', cls: 'status-upcoming' };
+    default:
+      return { label: status || '미정', cls: 'status-upcoming' };
   }
-  // 시작일이 미래
-  if (start && start > todayStr) {
-    return { label: '예정', cls: 'status-upcoming' };
-  }
-  // 종료일이 과거 → 상태가 active여도 실제로는 종료된 것
-  if (end && end < todayStr) {
-    return { label: '종료', cls: 'status-ended' };
-  }
-  // status 기반 기본값
-  if (event.status === 'active') return { label: '진행중', cls: 'status-active' };
-  return { label: '예정', cls: 'status-upcoming' };
 }
 
 function formatDateRange(start, end) {
@@ -1523,10 +1532,20 @@ function startQRScan() {
     var video = document.getElementById('qr-video');
     var container = document.getElementById('scanner-container');
     container.style.display = 'block';
+    video.classList.remove('ready');   // 준비 전까지 숨김
     video.srcObject = stream;
-    video.play();
+    // 비디오 메타데이터가 로드된 뒤에만 가시화 → 플레이 아이콘 깜빡임 방지
+    video.onloadedmetadata = function() {
+      video.play().then(function() {
+        video.classList.add('ready');
+        requestAnimationFrame(scanQRFrame);
+      }).catch(function() {
+        // 자동 재생 정책으로 실패해도 일단 보여주고 스캔 시도
+        video.classList.add('ready');
+        requestAnimationFrame(scanQRFrame);
+      });
+    };
     document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
-    requestAnimationFrame(scanQRFrame);
   }).catch(function(err) {
     document.getElementById('btn-start-scan').style.display = 'flex';
     document.getElementById('btn-stop-scan').style.display = 'none';
@@ -1623,6 +1642,7 @@ function stopQRScan() {
   }
   var video = document.getElementById('qr-video');
   video.srcObject = null;
+  video.classList.remove('ready');
   document.getElementById('scanner-container').style.display = 'none';
   document.getElementById('btn-start-scan').style.display = 'flex';
   document.getElementById('btn-stop-scan').style.display = 'none';

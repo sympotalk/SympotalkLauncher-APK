@@ -214,7 +214,14 @@ public class WifiHelper {
         try {
             WifiConfiguration config = buildConfig(ssid, password, security);
 
-            // 1) 먼저 기존 configured networks에서 동일 SSID 찾기
+            // 1) 이미 연결된 SSID 인 경우 바로 성공 반환
+            String currentSsid = getCurrentSSID();
+            if (currentSsid != null && currentSsid.equals(ssid)) {
+                callback.onConnectResult(true, ssid + " 에 이미 연결됨");
+                return;
+            }
+
+            // 2) 우리 앱이 과거에 저장한 프로필이 있는지 탐색 (Android 9 제한: 우리가 추가한 것만 반환)
             int existingId = -1;
             List<WifiConfiguration> existing = null;
             try { existing = wifiManager.getConfiguredNetworks(); } catch (Exception ignored) {}
@@ -230,24 +237,33 @@ public class WifiHelper {
             int networkId = -1;
 
             if (existingId != -1) {
-                // 기존 프로필 업데이트 시도
+                // 기존 프로필이 있으면 바로 enable 시도 (password 가 맞으면 성공)
+                wifiManager.disconnect();
+                boolean ok = wifiManager.enableNetwork(existingId, true);
+                wifiManager.reconnect();
+                if (ok) {
+                    callback.onConnectResult(true, ssid + " (저장된 프로필) 연결 시도 중...");
+                    return;
+                }
+                // enable 실패 → password 변경 가능성. update 시도
                 config.networkId = existingId;
                 networkId = wifiManager.updateNetwork(config);
-                // updateNetwork 실패 시 remove+add 시도
                 if (networkId == -1) {
+                    // update 불가 → 제거 후 재추가
                     wifiManager.removeNetwork(existingId);
-                    wifiManager.saveConfiguration();
+                    try { wifiManager.saveConfiguration(); } catch (Exception ignored) {}
                     config.networkId = -1;
                     networkId = wifiManager.addNetwork(config);
                 }
             } else {
-                // 새 네트워크 추가
+                // 우리 앱 프로필 없음 → 새로 추가 시도
                 networkId = wifiManager.addNetwork(config);
             }
 
+            // addNetwork 가 -1 이면 시스템 다른 앱(또는 시스템 설정)이 같은 SSID 를 소유 중
             if (networkId == -1) {
                 callback.onConnectResult(false,
-                    "네트워크 추가 실패. 이 SSID가 이미 시스템에 저장돼 있으면 '시스템 설정' 버튼에서 해당 WiFi '저장 안 함(잊기)' 후 다시 시도해주세요.");
+                    "SYSTEM_PROFILE_EXISTS|" + ssid);   // JS 가 파싱해서 시스템 설정 버튼 제공
                 return;
             }
 
