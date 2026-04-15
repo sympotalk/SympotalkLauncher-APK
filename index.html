@@ -623,6 +623,18 @@
     }
     .info-box strong { color: #60a5fa; }
 
+    /* 앱 업데이트 + 앱 정보 좌우 배치 (태블릿 랜드스케이프용) */
+    .app-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .app-row-col {
+      flex: 1;
+      min-width: 260px;
+      margin-bottom: 0;
+    }
+
     /* ─── Room section in detail ───────────────────────── */
     .room-group {
       margin-bottom: 20px;
@@ -790,39 +802,46 @@
             <div id="current-wifi" style="font-size:15px;font-weight:600;color:#22c55e;padding:8px 0">
               -
             </div>
-            <div style="display:flex;gap:8px;margin-top:6px">
-              <button class="btn-save" style="flex:1" onclick="refreshWifiList()">
-                🔍 주변 WiFi 스캔
+            <!-- 3개 버튼을 한 줄로 배치 -->
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px" onclick="refreshWifiList()">
+                🔍 주변 스캔
               </button>
-              <button class="btn-save" style="flex:1;background:#334155;color:#e2e8f0" onclick="openWifiSettings()">
+              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px;background:#334155;color:#e2e8f0" onclick="openWifiSettings()">
                 ⚙️ 시스템 설정
+              </button>
+              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px;background:#475569;color:#e2e8f0" onclick="openDefaultPwModal()">
+                🔑 기본 비밀번호
               </button>
             </div>
             <div id="wifi-scan-status" style="font-size:12px;color:#64748b;margin-top:8px;text-align:center"></div>
           </div>
 
-          <!-- 자주 쓰는 비밀번호 저장 -->
-          <div class="settings-item">
-            <div class="settings-label">자주 쓰는 WiFi 비밀번호</div>
-            <div class="settings-desc">
-              저장하면 스캔 목록에서 <strong>⚡ 원탭 연결</strong> 버튼이 표시됩니다.<br>
-              비밀번호 입력창에도 자동 채움됩니다.
+          <!-- 주변 WiFi 목록 (max-height: 7개 항목) -->
+          <div id="wifi-list" style="display:none;margin-top:8px;max-height:420px;overflow-y:auto;border-radius:10px"></div>
+        </div>
+
+        <!-- 기본 비밀번호 변경 모달 (신규) -->
+        <div id="default-pw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
+            <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:4px">🔑 기본 WiFi 비밀번호</div>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">
+              저장 시 스캔 목록에 <strong>⚡ 원탭 연결</strong> 버튼이 표시되고,
+              비밀번호 모달에 자동 채움됩니다.
             </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              <input class="settings-input" id="input-default-wifi-pw" type="password"
-                placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
-                style="flex:1">
-              <button class="btn-save" style="width:auto;padding:10px 14px;margin:0"
-                onclick="saveDefaultWifiPassword()">저장</button>
-            </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-top:8px">
-              <input type="checkbox" id="default-pw-show" onchange="toggleDefaultPwVisible()">
+            <input type="password" id="modal-default-pw-input" class="settings-input"
+              placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
+              style="margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
+              <input type="checkbox" id="modal-default-pw-show" onchange="toggleModalDefaultPwVisible()">
               비밀번호 표시
             </label>
+            <div style="display:flex;gap:8px">
+              <button class="btn-save" style="flex:1;background:#475569;color:#e2e8f0" onclick="closeDefaultPwModal()">취소</button>
+              <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="resetDefaultPassword()">기본값으로 복원</button>
+              <button class="btn-save" style="flex:1" onclick="saveDefaultPasswordFromModal()">저장</button>
+            </div>
           </div>
-
-          <!-- 주변 WiFi 목록 -->
-          <div id="wifi-list" style="display:none;margin-top:8px"></div>
         </div>
 
         <!-- WiFi 비밀번호 입력 모달 -->
@@ -872,93 +891,74 @@
           </div>
         </div>
 
-        <div class="settings-group">
-          <div class="settings-group-title">앱 업데이트</div>
-          <div class="settings-item">
-            <div class="settings-label">APK 자동 업데이트</div>
-            <div class="settings-desc">
-              GitHub Releases 에서 최신 APK 확인. 발견 시 <strong>앱 내에서 바로 다운로드 + 설치</strong> 가능.
-              삭제 없이 업데이트 됩니다 (v1.0.11+ 빌드부터).
+        <!-- 앱 업데이트 + 앱 정보 한 줄(좌우 분할) -->
+        <div class="settings-group app-row">
+          <!-- 앱 업데이트 섹션 -->
+          <div class="settings-item app-row-col">
+            <div class="settings-group-title" style="margin:0 0 8px 0">앱 업데이트</div>
+            <div style="display:flex;gap:8px;font-size:13px;color:#94a3b8;padding:4px 0 10px 0">
+              <span>현재 <strong id="app-update-current" style="color:#f1f5f9">-</strong></span>
+              <span style="margin-left:auto">최신 <strong id="app-update-latest" style="color:#60a5fa">-</strong></span>
+            </div>
+            <button class="btn-save" onclick="checkAppUpdate()" id="btn-check-app-update">
+              🔄 업데이트 확인
+            </button>
+            <div id="app-update-status" style="font-size:12px;color:#64748b;text-align:center;padding:6px 0"></div>
+
+            <!-- 다운로드 진행 바 -->
+            <div id="app-download-progress-wrap" style="display:none;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-top:6px">
+              <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">
+                📥 다운로드 중... <span id="app-download-percent">0%</span>
+              </div>
+              <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden">
+                <div id="app-download-bar" style="height:100%;background:#60a5fa;width:0%;transition:width 0.3s"></div>
+              </div>
             </div>
 
-            <div id="app-update-panel" style="display:flex;flex-direction:column;gap:8px">
-              <div style="display:flex;gap:8px;font-size:13px;color:#94a3b8;padding:8px 0">
-                <span>현재: <strong id="app-update-current" style="color:#f1f5f9">-</strong></span>
-                <span style="margin-left:auto">최신: <strong id="app-update-latest" style="color:#60a5fa">-</strong></span>
+            <!-- 업데이트 발견 시 패널 -->
+            <div id="app-update-available" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:12px;margin-top:8px">
+              <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:8px">
+                🆕 새 버전 <span id="app-update-avail-version">-</span>
               </div>
-              <button class="btn-save" onclick="checkAppUpdate()" id="btn-check-app-update">
-                🔄 업데이트 확인
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;border-bottom:1px solid #334155;padding-bottom:4px">📋 업데이트 내용</div>
+              <div id="app-update-avail-notes" style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px;max-height:160px;overflow-y:auto"></div>
+              <button class="btn-save" onclick="startAppDownload()" style="background:#22c55e;color:#052e16;font-weight:700">
+                📥 지금 업데이트
               </button>
-              <div id="app-update-status" style="font-size:12px;color:#64748b;text-align:center;padding:4px 0"></div>
-
-              <!-- 다운로드 진행 바 -->
-              <div id="app-download-progress-wrap" style="display:none;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px">
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">
-                  📥 다운로드 중... <span id="app-download-percent">0%</span>
-                </div>
-                <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden">
-                  <div id="app-download-bar" style="height:100%;background:#60a5fa;width:0%;transition:width 0.3s"></div>
-                </div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5">
+                💡 설치 실패 시 서명 불일치 가능성. 기존 앱 삭제 후 수동 설치 필요.
               </div>
+            </div>
 
-              <!-- 업데이트 발견 시 나타나는 패널 -->
-              <div id="app-update-available" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:12px">
-                <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:6px">
-                  🆕 새 버전 <span id="app-update-avail-version">-</span> 이 있습니다
-                </div>
-                <div id="app-update-avail-notes" style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:10px;max-height:120px;overflow-y:auto;white-space:pre-line"></div>
-                <button class="btn-save" onclick="startAppDownload()" style="background:#22c55e;color:#052e16;font-weight:700">
-                  📥 지금 업데이트
-                </button>
-                <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5">
-                  💡 설치가 "실패"로 끝나면 <strong>서명 불일치</strong>일 가능성이 높습니다.<br>
-                  그럴 땐 기존 앱을 삭제 후 수동 설치해야 합니다.
-                </div>
+            <!-- 설치 미완료 패널 -->
+            <div id="app-install-failed" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px;margin-top:8px">
+              <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:8px">
+                ⚠️ 업데이트가 완료되지 않았습니다
               </div>
-
-              <!-- 설치 미완료 감지 패널 (실패 또는 취소 모두 포함) -->
-              <div id="app-install-failed" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px;margin-top:8px">
-                <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:8px">
-                  ⚠️ 업데이트가 완료되지 않았습니다
-                </div>
-                <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px">
-                  설치가 <strong>취소</strong>되었거나 <strong>서명 불일치</strong>로 거부되었을 수 있습니다.<br>
-                  다시 시도하거나, 서명 문제라면 기존 앱을 삭제 후 재설치 해주세요.
-                </div>
-                <div style="display:flex;gap:6px">
-                  <button class="btn-save" style="flex:1;background:#60a5fa" onclick="checkAppUpdate()">
-                    🔄 다시 시도
-                  </button>
-                  <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="uninstallAndReinstall()">
-                    🗑️ 앱 삭제 후 재설치
-                  </button>
-                </div>
+              <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px">
+                설치가 <strong>취소</strong>되었거나 <strong>서명 불일치</strong>로 거부되었을 수 있습니다.
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn-save" style="flex:1;background:#60a5fa" onclick="checkAppUpdate()">🔄 다시 시도</button>
+                <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="uninstallAndReinstall()">🗑️ 삭제 후 재설치</button>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="settings-group">
-          <div class="settings-group-title">화면 절전 방지</div>
-          <div class="settings-item">
-            <div class="settings-label">절전 방지</div>
-            <div class="settings-desc">
-              장시간 사용 시 화면이 꺼지지 않도록 합니다. APK 설치 시 자동으로 활성화됩니다.
+          <!-- 앱 정보 섹션 -->
+          <div class="settings-item app-row-col">
+            <div class="settings-group-title" style="margin:0 0 8px 0">앱 정보</div>
+            <div class="info-box" style="font-size:12px;line-height:1.9">
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">APK 버전</span> <strong id="info-apk-ver" style="color:#f1f5f9">-</strong></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">웹 콘텐츠</span> <span id="info-content-ver" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">실행 환경</span> <span id="info-env" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Android</span> <span id="info-android" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">WebView</span> <span id="info-webview" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">프록시 캐시</span> <span id="info-proxy-cache" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">마지막 체크</span> <span id="info-last-check" style="color:#64748b;font-size:11px">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Supabase</span> <span style="color:#cbd5e1">sympotalkv2</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">GitHub</span> <span style="color:#cbd5e1;font-size:11px">sympotalk/SympotalkLauncher-APK</span></div>
             </div>
-            <button class="btn-save" style="background:#334155;color:#e2e8f0;margin-top:4px"
-              onclick="requestWakeLock()">절전 방지 활성화</button>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">앱 정보</div>
-          <div class="info-box">
-            <strong>Sympotalk 행사 런처</strong><br>
-            링크 기본 주소: <strong id="app-base-url">-</strong><br>
-            Supabase: sympotalkv2<br>
-            <span style="color:#94a3b8">APK 버전 (네이티브):</span> <strong id="app-version-native" style="color:#f1f5f9">-</strong><br>
-            <span style="color:#94a3b8">웹 콘텐츠 버전:</span> <span id="app-version-content" style="color:#64748b;font-size:11px">-</span><br>
-            실행 환경: <span id="app-env">웹</span>
           </div>
         </div>
 
@@ -1052,26 +1052,45 @@ var DEFAULT_WIFI_PASSWORD = 'a01044447995';   // 회사 기본 WiFi 비밀번호
 function getDefaultWifiPassword() {
   try {
     var saved = localStorage.getItem('default_wifi_pw');
-    // localStorage 에 저장된 값이 있으면 그걸, 없으면 하드코딩 기본값
     return (saved !== null && saved !== '') ? saved : DEFAULT_WIFI_PASSWORD;
   } catch(e) { return DEFAULT_WIFI_PASSWORD; }
 }
-function saveDefaultWifiPassword() {
-  var pw = document.getElementById('input-default-wifi-pw').value;
+
+/* ── 기본 비밀번호 변경 모달 ── */
+function openDefaultPwModal() {
+  var input = document.getElementById('modal-default-pw-input');
+  input.value = getDefaultWifiPassword();
+  input.type = 'password';
+  document.getElementById('modal-default-pw-show').checked = false;
+  document.getElementById('default-pw-modal').style.display = 'flex';
+}
+function closeDefaultPwModal() {
+  document.getElementById('default-pw-modal').style.display = 'none';
+  document.getElementById('modal-default-pw-input').value = '';
+}
+function toggleModalDefaultPwVisible() {
+  var input = document.getElementById('modal-default-pw-input');
+  input.type = document.getElementById('modal-default-pw-show').checked ? 'text' : 'password';
+}
+function saveDefaultPasswordFromModal() {
+  var pw = document.getElementById('modal-default-pw-input').value;
   if (pw === '' || pw === DEFAULT_WIFI_PASSWORD) {
-    // 빈 값 또는 기본값과 같으면 localStorage 비움 → 항상 하드코딩 기본값 사용
     localStorage.removeItem('default_wifi_pw');
     showToast('기본 비밀번호로 복원되었습니다');
   } else {
     localStorage.setItem('default_wifi_pw', pw);
-    showToast('자주 쓰는 비밀번호가 저장되었습니다');
+    showToast('비밀번호가 저장되었습니다');
   }
   refreshWifiListUIFromCache();
+  closeDefaultPwModal();
 }
-function toggleDefaultPwVisible() {
-  var input = document.getElementById('input-default-wifi-pw');
-  var checked = document.getElementById('default-pw-show').checked;
-  input.type = checked ? 'text' : 'password';
+function resetDefaultPassword() {
+  if (confirm('하드코딩된 기본 비밀번호(' + DEFAULT_WIFI_PASSWORD + ')로 복원하시겠습니까?')) {
+    localStorage.removeItem('default_wifi_pw');
+    showToast('기본 비밀번호로 복원되었습니다');
+    refreshWifiListUIFromCache();
+    closeDefaultPwModal();
+  }
 }
 /* 스캔 결과 캐시 (저장 비밀번호 변경 시 UI 즉시 갱신) */
 var cachedScanResults = null;
@@ -1389,8 +1408,7 @@ function showView(name) {
   if (name === 'settings') {
     updateCurrentWifi();
     updateCurrentAppVersion();
-    var pwInput = document.getElementById('input-default-wifi-pw');
-    if (pwInput) pwInput.value = getDefaultWifiPassword();
+    loadAppInfo();
   }
 }
 
@@ -2199,10 +2217,49 @@ function updateCurrentAppVersion() {
   var el = document.getElementById('app-update-current');
   if (!el) return;
   if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
-    try { el.textContent = AndroidBridge.getAppVersion(); } catch(e) { el.textContent = '-'; }
+    try { el.textContent = 'v' + AndroidBridge.getAppVersion(); } catch(e) { el.textContent = '-'; }
   } else {
     el.textContent = '(웹)';
   }
+}
+
+// 간이 마크다운 → HTML 렌더링 (GitHub release body 용)
+//   - 헤더 (#, ##, ###), 리스트 (-, *), 볼드 (**text**), 이탤릭 (*text*, _text_)
+//   - 인라인 코드 (`code`), 줄바꿈, URL 자동 링크
+// XSS 방지: 원본 텍스트를 먼저 escape 후 허용 패턴만 재구성
+function renderMarkdownLite(md) {
+  if (!md) return '';
+  var html = String(md)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // 코드 블록 `...` (줄바꿈 방어)
+  html = html.replace(/`([^`\n]+)`/g, '<code style="background:#0f172a;padding:1px 5px;border-radius:3px;font-size:11px;color:#93c5fd">$1</code>');
+  // 헤더 ### ## #
+  html = html.replace(/^###\s+(.+)$/gm, '<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin:6px 0 3px">$1</div>');
+  html = html.replace(/^##\s+(.+)$/gm,  '<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin:8px 0 4px">$1</div>');
+  html = html.replace(/^#\s+(.+)$/gm,   '<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 4px">$1</div>');
+  // 볼드 **
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>');
+  // 이탤릭 _text_ or *text*
+  html = html.replace(/(^|\s)_([^_\n]+)_/g, '$1<em style="color:#cbd5e1">$2</em>');
+  // 리스트 항목 -
+  html = html.replace(/^[-*]\s+(.+)$/gm, '<div style="padding-left:14px;position:relative"><span style="position:absolute;left:0">•</span>$1</div>');
+  // URL 자동 링크
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#60a5fa" target="_blank">$1</a>');
+  // 줄바꿈
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function updateLastCheckTimestamp() {
+  var el = document.getElementById('info-last-check');
+  if (!el) return;
+  var now = new Date();
+  var h = String(now.getHours()).padStart(2,'0');
+  var m = String(now.getMinutes()).padStart(2,'0');
+  el.textContent = h + ':' + m;
 }
 
 function checkAppUpdate() {
@@ -2233,12 +2290,14 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
   var panelEl = document.getElementById('app-update-available');
   btnEl.disabled = false;
 
+  updateLastCheckTimestamp();
   if (status === 'available') {
     latestEl.textContent = latestVersion;
     latestEl.style.color = '#22c55e';
     statusEl.textContent = '✅ 새 버전 발견';
     document.getElementById('app-update-avail-version').textContent = 'v' + latestVersion;
-    document.getElementById('app-update-avail-notes').textContent = (notes || '').slice(0, 500);
+    // 간이 마크다운 렌더링 (GitHub Release body 지원)
+    document.getElementById('app-update-avail-notes').innerHTML = renderMarkdownLite(notes || '_업데이트 내용 없음_');
     pendingApkUrl = apkUrl;
     pendingUpdateVersion = latestVersion;
     panelEl.style.display = 'block';
@@ -2378,39 +2437,64 @@ document.addEventListener('visibilitychange', function() {
 });
 
 /* ═══════════════════════════════════════════════════════
-   VERSION LOADERS — 두 개의 독립적인 버전 시스템을 분리 표기
-   1) APK 버전: BuildConfig.VERSION_NAME (AndroidBridge.getAppVersion)
-      - 실제 설치된 APK 의 버전. 업데이트 판단의 단일 진실.
-   2) 웹 콘텐츠 버전: version.txt (XHR)
-      - Cloudflare 에서 auto-download 된 HTML 번들의 버전.
-      - APK 업데이트 없이도 바뀔 수 있어 별도 표기.
+   APP INFO LOADER — 상세 정보 한꺼번에 채우기
+   (APK 버전 / 웹 콘텐츠 / 환경 / Android / WebView / 프록시 / 체크시각)
 ═══════════════════════════════════════════════════════ */
-function loadAppVersion() {
-  // 1) APK 네이티브 버전 (authoritative)
-  var nativeEl = document.getElementById('app-version-native');
-  if (nativeEl) {
+function loadAppInfo() {
+  // APK 버전 (네이티브)
+  var apkEl = document.getElementById('info-apk-ver');
+  if (apkEl) {
     if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
-      try { nativeEl.textContent = AndroidBridge.getAppVersion(); }
-      catch(e) { nativeEl.textContent = '(확인불가)'; }
+      try { apkEl.textContent = 'v' + AndroidBridge.getAppVersion(); } catch(e) { apkEl.textContent = '(확인불가)'; }
     } else {
-      nativeEl.textContent = '(웹)';
+      apkEl.textContent = '(웹)';
     }
   }
 
-  // 2) 웹 콘텐츠 버전 (information only)
-  var contentEl = document.getElementById('app-version-content');
-  if (!contentEl) return;
-  var xhr = new XMLHttpRequest();
-  try { xhr.open('GET', 'version.txt?_=' + Date.now(), true); }
-  catch(e) { contentEl.textContent = '(n/a)'; return; }
-  xhr.onreadystatechange = function() {
-    if (xhr.readyState !== 4) return;
-    var ok = (xhr.status === 200 || xhr.status === 0);
-    if (ok && xhr.responseText) contentEl.textContent = xhr.responseText.trim();
-    else contentEl.textContent = '(n/a)';
-  };
-  xhr.onerror = function() { contentEl.textContent = '(n/a)'; };
-  try { xhr.send(null); } catch(e) { contentEl.textContent = '(n/a)'; }
+  // 실행 환경
+  var envEl = document.getElementById('info-env');
+  if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK' : '웹 브라우저';
+
+  // 웹 콘텐츠 버전 (version.txt XHR)
+  var contentEl = document.getElementById('info-content-ver');
+  if (contentEl) {
+    var xhr = new XMLHttpRequest();
+    try { xhr.open('GET', 'version.txt?_=' + Date.now(), true); }
+    catch(e) { contentEl.textContent = '(n/a)'; return; }
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) return;
+      var ok = (xhr.status === 200 || xhr.status === 0);
+      if (ok && xhr.responseText) contentEl.textContent = 'v' + xhr.responseText.trim();
+      else contentEl.textContent = '(n/a)';
+    };
+    xhr.onerror = function() { contentEl.textContent = '(n/a)'; };
+    try { xhr.send(null); } catch(e) { contentEl.textContent = '(n/a)'; }
+  }
+
+  // Android 버전 + WebView 버전 추출
+  var ua = navigator.userAgent || '';
+  var androidEl = document.getElementById('info-android');
+  if (androidEl) {
+    var m = ua.match(/Android\s+([\d.]+)/);
+    androidEl.textContent = m ? 'Android ' + m[1] : '(n/a)';
+  }
+  var wvEl = document.getElementById('info-webview');
+  if (wvEl) {
+    var c = ua.match(/Chrome\/([\d.]+)/);
+    wvEl.textContent = c ? 'Chrome ' + c[1].split('.')[0] : '(n/a)';
+  }
+
+  // 프록시 캐시 상태 (X-Cache 헤더로 판단)
+  var cacheEl = document.getElementById('info-proxy-cache');
+  if (cacheEl) {
+    cacheEl.textContent = '확인 중...';
+    fetch(PROXY_URL + '/api/health', { cache: 'no-store' })
+      .then(function(r) {
+        var cf = r.headers.get('CF-Ray') ? 'Cloudflare POP' : '—';
+        cacheEl.textContent = r.ok ? '정상 · ' + cf : '응답 ' + r.status;
+      })
+      .catch(function() { cacheEl.textContent = '연결 실패'; });
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2491,7 +2575,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 버전 표시 (version.txt 동적 로드)
   // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용
-  loadAppVersion();
+  loadAppInfo();
 
   // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원 (외부 URL → 런처 복귀)
   try {
