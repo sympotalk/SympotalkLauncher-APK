@@ -155,31 +155,64 @@
     .event-card {
       display: flex;
       align-items: center;
-      padding: 14px 16px;
-      gap: 12px;
+      padding: 16px;
+      gap: 14px;
       cursor: pointer;
       transition: background 0.1s;
     }
     .event-card:active { background: #273549; }
     .event-card + .event-card { border-top: 1px solid #334155; }
-    .event-info { flex: 1; min-width: 0; }
+
+    /* 좌측: 행사명(크게) + 수정 시각 */
+    .event-name-col {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
     .event-name {
-      font-size: 16px;
-      font-weight: 600;
+      font-size: 19px;          /* 기존 16px → 19px 증가 */
+      font-weight: 700;
       color: #f1f5f9;
-      margin-bottom: 4px;
+      line-height: 1.3;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .event-meta {
+    .event-updated {
       font-size: 12px;
-      color: #64748b;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+      color: #475569;
     }
-    .event-agency { color: #94a3b8; }
+
+    /* 우측: 날짜 / 에이전시 / 담당자 세로 스택 */
+    .event-meta-col {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 14px;          /* 기존 12px → 14px 증가 */
+      color: #cbd5e1;
+      flex-shrink: 0;
+      min-width: 160px;
+      max-width: 220px;
+    }
+    .event-meta-col > div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+    }
+    .event-meta-col .meta-agency { color: #94a3b8; }
+    .event-meta-col .meta-manager { color: #94a3b8; }
+
+    /* 우측 끝: 상태 배지 + 화살표 세로 */
+    .event-badge-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
     .status-badge {
       flex-shrink: 0;
       padding: 3px 10px;
@@ -805,42 +838,25 @@
 
         <div class="settings-group">
           <div class="settings-group-title">네트워크 진단</div>
-
-          <!-- 연결 테스트 -->
           <div class="settings-item">
-            <div class="settings-label">인터넷 연결 테스트</div>
             <div class="settings-desc">
-              주요 서비스(Supabase · 프록시 · GitHub) 접속 가능 여부를 확인합니다.
+              연결 가능 여부 · 공유기 응답속도(LAN Ping) · 실효 인터넷 속도를 측정합니다.
             </div>
-            <button class="btn-save" onclick="runNetworkDiagnostic()" id="btn-net-diag">
-              🌐 연결 테스트 실행
-            </button>
+            <!-- 3개 버튼을 한 줄로 배치 -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runNetworkDiagnostic()" id="btn-net-diag">
+                🌐 연결
+              </button>
+              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runPingTest()" id="btn-ping">
+                📡 LAN Ping
+              </button>
+              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runSpeedTest()" id="btn-speed">
+                ⚡ 속도
+              </button>
+            </div>
             <div id="net-diag-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
-          </div>
-
-          <!-- Ping 테스트 -->
-          <div class="settings-item">
-            <div class="settings-label">Ping 테스트 (지연 시간)</div>
-            <div class="settings-desc">
-              프록시 서버까지 왕복 시간을 5회 측정해 min/avg/max 를 표시합니다.
-            </div>
-            <button class="btn-save" onclick="runPingTest()" id="btn-ping">
-              📡 Ping 측정 (5회)
-            </button>
-            <div id="ping-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
-          </div>
-
-          <!-- Speed Test -->
-          <div class="settings-item">
-            <div class="settings-label">인터넷 속도 측정</div>
-            <div class="settings-desc">
-              Cloudflare 에서 10MB 다운로드 후 실효 속도(Mbps)를 계산합니다.
-              행사장 공유기 품질 확인용.
-            </div>
-            <button class="btn-save" onclick="runSpeedTest()" id="btn-speed">
-              ⚡ 속도 측정 (10MB 다운로드)
-            </button>
-            <div id="speed-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
+            <div id="ping-result" style="font-size:12px;margin-top:8px;line-height:1.8"></div>
+            <div id="speed-result" style="font-size:12px;margin-top:8px;line-height:1.8"></div>
           </div>
         </div>
 
@@ -1544,17 +1560,22 @@ function renderEventList(events) {
     var dateStr = formatDateRange(ev.start_date, ev.end_date);
     var updatedStr = formatRelativeTime(ev.updated_at);
     html += '<div class="event-card" onclick="openEventDetail(' + escAttr(ev) + ')">' +
-      '<div class="event-info">' +
+      // 좌측: 행사명 + 수정시각
+      '<div class="event-name-col">' +
         '<div class="event-name">' + escHtml(ev.name) + '</div>' +
-        '<div class="event-meta">' +
-          '<span>📅 ' + dateStr + '</span>' +
-          (ev.agency ? '<span class="event-agency">🏢 ' + escHtml(ev.agency) + '</span>' : '') +
-          (ev.manager_name ? '<span class="event-agency">👤 ' + escHtml(ev.manager_name) + '</span>' : '') +
-        '</div>' +
-        (updatedStr ? '<div class="event-meta" style="margin-top:2px"><span style="color:#475569;font-size:11px">🕐 수정 ' + updatedStr + '</span></div>' : '') +
+        (updatedStr ? '<div class="event-updated">🕐 수정 ' + updatedStr + '</div>' : '') +
       '</div>' +
-      '<span class="status-badge ' + statusInfo.cls + '">' + statusInfo.label + '</span>' +
-      '<span class="event-arrow">›</span>' +
+      // 우측: 날짜/에이전시/담당자 세로 스택
+      '<div class="event-meta-col">' +
+        '<div>📅 ' + dateStr + '</div>' +
+        (ev.agency ? '<div class="meta-agency">🏢 ' + escHtml(ev.agency) + '</div>' : '') +
+        (ev.manager_name ? '<div class="meta-manager">👤 ' + escHtml(ev.manager_name) + '</div>' : '') +
+      '</div>' +
+      // 우측 끝: 상태 + 화살표
+      '<div class="event-badge-col">' +
+        '<span class="status-badge ' + statusInfo.cls + '">' + statusInfo.label + '</span>' +
+        '<span class="event-arrow">›</span>' +
+      '</div>' +
     '</div>';
   }
   html += '</div>';
@@ -1582,6 +1603,8 @@ function formatRelativeTime(iso) {
 ═══════════════════════════════════════════════════════ */
 function openEventDetail(event) {
   state.currentEvent = event;
+  // Back 버튼 long-press 로 복귀할 때 사용 (MainActivity.consumeLongPressReturn)
+  try { localStorage.setItem('last_event_detail', JSON.stringify(event)); } catch(e) {}
   showView('detail');
 
   document.getElementById('detail-name').textContent = event.name;
@@ -1988,65 +2011,71 @@ function runNetworkDiagnostic() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PING TEST (HTTP latency 기반 - 5회 샘플)
+   PING TEST — LAN Gateway (공유기) 왕복시간
+   - APK 환경: AndroidBridge.pingGateway() (네이티브 InetAddress.isReachable)
+   - 웹 환경: 불가 (브라우저는 LAN ICMP 접근 안 됨)
 ═══════════════════════════════════════════════════════ */
 function runPingTest() {
   var btn = document.getElementById('btn-ping');
   var resultEl = document.getElementById('ping-result');
   btn.disabled = true;
-  resultEl.innerHTML = '측정 중... (5회)';
 
-  var targetUrl = PROXY_URL + '/api/health';   // 프록시 헬스체크 엔드포인트
+  if (!hasNativeBridge || typeof AndroidBridge.pingGateway !== 'function') {
+    resultEl.innerHTML = '<div style="color:#fbbf24">⚠️ APK 환경 필요 (v1.0.26+)</div>';
+    btn.disabled = false;
+    return;
+  }
+
+  var gateway = '';
+  try { gateway = AndroidBridge.getGatewayIp(); } catch(e) {}
+  if (!gateway) {
+    resultEl.innerHTML = '<div style="color:#ef4444">❌ WiFi 연결을 먼저 확인해주세요 (Gateway 주소 없음)</div>';
+    btn.disabled = false;
+    return;
+  }
+
+  resultEl.innerHTML = '🔍 Gateway ' + gateway + ' 측정 중... (5회)';
+
   var samples = 5;
-  var interval = 250;   // ms between samples
-  var times = [];
+  var results = [];
   var fails = 0;
   var i = 0;
 
   function tick() {
-    if (i >= samples) {
-      finish();
-      return;
-    }
-    var start = performance.now();
-    fetch(targetUrl + '?_=' + Date.now(), {
-      method: 'GET',
-      cache: 'no-store',
-      headers: { 'Accept': 'application/json' }
-    }).then(function(r) {
-      if (r.ok) {
-        times.push(performance.now() - start);
-      } else {
-        fails++;
-      }
-    }).catch(function() {
-      fails++;
-    }).finally(function() {
+    if (i >= samples) { finish(); return; }
+    // pingGateway 는 blocking native call → setTimeout 으로 UI 스레드 양보
+    setTimeout(function() {
+      var ms = -1;
+      try { ms = AndroidBridge.pingGateway(2000); } catch(e) {}
+      if (ms >= 0) results.push(ms);
+      else fails++;
       i++;
-      resultEl.innerHTML = '측정 중... (' + i + '/' + samples + ')';
-      setTimeout(tick, interval);
-    });
+      resultEl.innerHTML = '🔍 Gateway ' + gateway + ' 측정 중... (' + i + '/' + samples + ')';
+      setTimeout(tick, 150);
+    }, 50);
   }
 
   function finish() {
     btn.disabled = false;
-    if (times.length === 0) {
-      resultEl.innerHTML = '<div style="color:#ef4444">❌ 모든 요청 실패 — WiFi/인터넷 확인 필요</div>';
+    if (results.length === 0) {
+      resultEl.innerHTML =
+        '<div><strong>🏠 Gateway:</strong> ' + gateway + '</div>' +
+        '<div style="color:#ef4444">❌ 공유기에 접근할 수 없습니다 (' + samples + '회 모두 실패)</div>';
       return;
     }
-    var min = Math.min.apply(null, times);
-    var max = Math.max.apply(null, times);
-    var avg = times.reduce(function(a,b){return a+b;}, 0) / times.length;
+    var min = Math.min.apply(null, results);
+    var max = Math.max.apply(null, results);
+    var avg = results.reduce(function(a,b){return a+b;}, 0) / results.length;
     var lossPct = Math.round(fails / samples * 100);
-    var quality = avg < 50 ? '🟢 매우 좋음'
-                : avg < 150 ? '🟢 양호'
-                : avg < 300 ? '🟡 보통'
-                : '🔴 느림';
+    var quality = avg < 5  ? '🟢 매우 빠름'
+                : avg < 20 ? '🟢 양호'
+                : avg < 50 ? '🟡 보통'
+                : '🔴 느림 (공유기 부하 가능)';
     resultEl.innerHTML =
-      '<div><strong>대상:</strong> ' + PROXY_URL + '/api/health</div>' +
-      '<div><strong>샘플:</strong> ' + times.length + '/' + samples + ' 성공' +
+      '<div><strong>🏠 Gateway:</strong> ' + gateway + ' · 📡 LAN Ping</div>' +
+      '<div><strong>샘플:</strong> ' + results.length + '/' + samples +
         (lossPct > 0 ? ' (손실 ' + lossPct + '%)' : '') + '</div>' +
-      '<div><strong>지연:</strong> min ' + min.toFixed(0) + 'ms · avg ' + avg.toFixed(0) + 'ms · max ' + max.toFixed(0) + 'ms</div>' +
+      '<div><strong>응답:</strong> min ' + min + 'ms · avg ' + avg.toFixed(0) + 'ms · max ' + max + 'ms</div>' +
       '<div style="margin-top:4px">' + quality + '</div>';
   }
 
@@ -2054,72 +2083,92 @@ function runPingTest() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   SPEED TEST (Cloudflare __down 엔드포인트 - 실효 다운로드 속도)
+   SPEED TEST — XMLHttpRequest 기반 (WebView file:// 호환성)
+   - fetch + ReadableStream 은 WebView 에서 끊기거나 진행률 안 나오는 경우가 있어 XHR 로 교체
+   - onprogress 는 WebKit/Blink 양쪽 모두 안정적으로 동작
 ═══════════════════════════════════════════════════════ */
 function runSpeedTest() {
   var btn = document.getElementById('btn-speed');
   var resultEl = document.getElementById('speed-result');
   btn.disabled = true;
-  resultEl.innerHTML = '다운로드 중...';
+  resultEl.innerHTML = '🔗 서버 연결 중...';
 
-  var hasStream = !!(window.ReadableStream && Response.prototype.body);
-  // 구형 WebView 폴백: 메모리 부담 축소 (10MB → 2MB)
-  var sizeBytes = hasStream ? 10 * 1000 * 1000 : 2 * 1000 * 1000;
-  var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes;
-  var start = performance.now();
-  var progressBytes = 0;
-  var lastUiUpdate = 0;   // throttle: 100ms 또는 10% 단위 이상 변경 시만 UI 갱신
+  var sizeBytes = 5 * 1000 * 1000;   // 5MB (WebView 메모리 부담 감소)
+  var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes + '&_=' + Date.now();
 
-  fetch(url, { method: 'GET', cache: 'no-store', mode: 'cors' })
-    .then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      if (!res.body || !res.body.getReader) {
-        // 구형 WebView: blob 전체 적재 (2MB)
-        return res.blob().then(function(blob) {
-          progressBytes = blob.size;
-          return progressBytes;
-        });
-      }
-      var reader = res.body.getReader();
-      function pump() {
-        return reader.read().then(function(chunk) {
-          if (chunk.done) return progressBytes;
-          progressBytes += chunk.value.length;
-          // UI throttle: 마지막 갱신 후 100ms 경과했을 때만 innerHTML 업데이트
-          var now = performance.now();
-          if (now - lastUiUpdate > 100) {
-            lastUiUpdate = now;
-            var pct = Math.min(100, Math.round(progressBytes / sizeBytes * 100));
-            resultEl.innerHTML = '다운로드 중... ' + pct + '% (' +
-              (progressBytes / 1000000).toFixed(1) + ' / ' + (sizeBytes/1000000).toFixed(0) + ' MB)';
-          }
-          return pump();
-        });
-      }
-      return pump();
-    })
-    .then(function(bytes) {
-      var elapsed = (performance.now() - start) / 1000;   // seconds
-      if (elapsed < 0.01 || !bytes) {
-        resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 불가</div>';
-        return;
-      }
-      var mbps = (bytes * 8 / elapsed / 1000000);
-      var quality = mbps >= 50 ? '🟢 매우 빠름'
-                  : mbps >= 20 ? '🟢 양호 (HD 스트리밍 가능)'
-                  : mbps >= 5  ? '🟡 보통 (기본 업무 가능)'
-                  : '🔴 느림 (공유기 점검 필요)';
-      resultEl.innerHTML =
-        '<div><strong>속도:</strong> <span style="font-size:18px;color:#60a5fa;font-weight:700">' + mbps.toFixed(2) + ' Mbps</span></div>' +
-        '<div><strong>다운로드:</strong> ' + (bytes/1000000).toFixed(1) + ' MB / ' + elapsed.toFixed(1) + '초</div>' +
-        '<div style="margin-top:4px">' + quality + '</div>';
-    })
-    .catch(function(err) {
-      resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 실패: ' + escHtml(err.message) + '</div>';
-    })
-    .finally(function() {
-      btn.disabled = false;
-    });
+  var start = 0;
+  var lastUiUpdate = 0;
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.responseType = 'arraybuffer';
+  xhr.timeout = 30000;   // 30초 timeout
+
+  xhr.onloadstart = function() {
+    start = performance.now();
+    resultEl.innerHTML = '📥 다운로드 중... 0%';
+  };
+
+  xhr.onprogress = function(e) {
+    var now = performance.now();
+    if (now - lastUiUpdate < 200) return;   // 200ms throttle
+    lastUiUpdate = now;
+    var loadedMB = (e.loaded / 1000000).toFixed(1);
+    if (e.lengthComputable && e.total > 0) {
+      var pct = Math.round(e.loaded / e.total * 100);
+      resultEl.innerHTML = '📥 다운로드 중... ' + pct + '% (' + loadedMB + ' / ' +
+        (e.total/1000000).toFixed(1) + ' MB)';
+    } else {
+      resultEl.innerHTML = '📥 다운로드 중... ' + loadedMB + ' MB';
+    }
+  };
+
+  xhr.onload = function() {
+    btn.disabled = false;
+    var elapsed = (performance.now() - start) / 1000;
+    var bytes = xhr.response ? xhr.response.byteLength : 0;
+    if (xhr.status !== 200) {
+      resultEl.innerHTML = '<div style="color:#ef4444">❌ HTTP ' + xhr.status + '</div>';
+      return;
+    }
+    if (!bytes || elapsed < 0.01) {
+      resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 불가 (응답 데이터 없음)</div>';
+      return;
+    }
+    var mbps = (bytes * 8 / elapsed / 1000000);
+    var quality = mbps >= 50 ? '🟢 매우 빠름'
+                : mbps >= 20 ? '🟢 양호 (HD 스트리밍 가능)'
+                : mbps >= 5  ? '🟡 보통'
+                : '🔴 느림 (공유기 점검 권장)';
+    resultEl.innerHTML =
+      '<div><strong>⚡ 속도:</strong> <span style="font-size:20px;color:#60a5fa;font-weight:700">' +
+        mbps.toFixed(2) + ' Mbps</span></div>' +
+      '<div><strong>다운로드:</strong> ' + (bytes/1000000).toFixed(1) + ' MB / ' +
+        elapsed.toFixed(1) + '초</div>' +
+      '<div style="margin-top:4px">' + quality + '</div>';
+  };
+
+  xhr.onerror = function() {
+    btn.disabled = false;
+    resultEl.innerHTML = '<div style="color:#ef4444">❌ 네트워크 오류 — WiFi 연결을 확인해주세요</div>';
+  };
+
+  xhr.ontimeout = function() {
+    btn.disabled = false;
+    resultEl.innerHTML = '<div style="color:#fbbf24">⏱️ 시간 초과 (30초) — 연결이 매우 느립니다</div>';
+  };
+
+  xhr.onabort = function() {
+    btn.disabled = false;
+    resultEl.innerHTML = '<div style="color:#64748b">측정 취소됨</div>';
+  };
+
+  try {
+    xhr.send();
+  } catch (err) {
+    btn.disabled = false;
+    resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 시작 실패: ' + escHtml(err.message) + '</div>';
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2432,13 +2481,28 @@ document.addEventListener('DOMContentLoaded', function() {
   // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용
   loadAppVersion();
 
-  // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원
+  // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원 (외부 URL → 런처 복귀)
   try {
     var lastEventStr = sessionStorage.getItem('last_event');
     if (lastEventStr) {
       var lastEvent = JSON.parse(lastEventStr);
       sessionStorage.removeItem('last_event');
       setTimeout(function() { openEventDetail(lastEvent); }, 300);
+    }
+  } catch(e) {}
+
+  // Back 버튼 long-press 로 런처 재로드 된 경우: 마지막 본 행사 상세로 자동 이동
+  try {
+    if (hasNativeBridge && typeof AndroidBridge.consumeLongPressReturn === 'function'
+        && AndroidBridge.consumeLongPressReturn()) {
+      var persisted = localStorage.getItem('last_event_detail');
+      if (persisted) {
+        setTimeout(function() {
+          try { openEventDetail(JSON.parse(persisted)); } catch(e) {}
+        }, 400);
+      } else {
+        showToast('최근 본 행사가 없습니다');
+      }
     }
   } catch(e) {}
 

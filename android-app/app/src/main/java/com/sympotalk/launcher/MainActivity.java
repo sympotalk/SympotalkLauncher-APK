@@ -1,17 +1,23 @@
 package com.sympotalk.launcher;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.DhcpInfo;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.Toast;
+
+import java.net.InetAddress;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -30,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_LOCATION = 1002;
     private static final int REQ_STARTUP = 1003;
     private boolean hasEverRequestedLocation = false;   // 최초 요청 플래그
+    private boolean pendingLongPressReturn = false;      // Long-press BACK → 행사상세 복귀용
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -268,14 +275,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ── Back 버튼 동작 ─────────────────────────────────
+    // Short press: 무시 (사용자가 실수로 앱/페이지 이탈하는 것 방지)
+    // Long  press: 런처 재로드 + localStorage 기반 마지막 행사 상세로 이동
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            event.startTracking();    // long press 추적 활성화
+            return true;              // down 이벤트 consume
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyLongPress(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            pendingLongPressReturn = true;
+            // sympopad.com 등 외부 URL 에 있을 수 있으므로 런처 HTML 재로드
+            runOnUiThread(this::loadApp);
+            Toast.makeText(this, "행사 상세로 돌아갑니다", Toast.LENGTH_SHORT).show();
+            return true;
+        }
+        return super.onKeyLongPress(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            // Short press: 아무것도 안 함 (long press 는 이미 onKeyLongPress 에서 처리됨)
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
+    }
+
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            // 앱 종료 대신 백그라운드로 이동
-            moveTaskToBack(true);
-        }
+        // 명시적 no-op — onKeyDown/Up 이 이벤트를 완전히 consume
     }
 
     @Override
@@ -459,6 +495,58 @@ public class MainActivity extends AppCompatActivity {
                             success + "," + jsonStringify(message) + ")");
                     }
                 }));
+        }
+
+        // ══════════════════════ 내부망 Ping / Back 복귀 ══════════════════════
+
+        /** 현재 연결된 WiFi 의 gateway IP (x.x.x.x). 연결 안 됐거나 에러면 "" */
+        @JavascriptInterface
+        public String getGatewayIp() {
+            try {
+                WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+                if (wm == null) return "";
+                DhcpInfo dhcp = wm.getDhcpInfo();
+                if (dhcp == null || dhcp.gateway == 0) return "";
+                int gw = dhcp.gateway;
+                return String.format("%d.%d.%d.%d",
+                    gw & 0xff, (gw >> 8) & 0xff, (gw >> 16) & 0xff, (gw >> 24) & 0xff);
+            } catch (Exception e) { return ""; }
+        }
+
+        /**
+         * 내부망 gateway(공유기) 로 ping. InetAddress.isReachable 사용 (ICMP/TCP).
+         * @return -1 실패, 아니면 왕복시간(ms)
+         */
+        @JavascriptInterface
+        public int pingGateway(int timeoutMs) {
+            try {
+                WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+                if (wm == null) return -1;
+                DhcpInfo dhcp = wm.getDhcpInfo();
+                if (dhcp == null || dhcp.gateway == 0) return -1;
+                int gw = dhcp.gateway;
+                InetAddress addr = InetAddress.getByAddress(new byte[] {
+                    (byte)(gw & 0xff), (byte)((gw >> 8) & 0xff),
+                    (byte)((gw >> 16) & 0xff), (byte)((gw >> 24) & 0xff)
+                });
+                long start = System.currentTimeMillis();
+                boolean ok = addr.isReachable(timeoutMs);
+                long elapsed = System.currentTimeMillis() - start;
+                return ok ? (int) elapsed : -1;
+            } catch (Exception e) { return -1; }
+        }
+
+        /**
+         * Back 버튼 Long-press 로 런처가 재로드된 경우, JS 초기화 시 이 메서드로 확인.
+         * true 를 반환하면 JS 가 localStorage.last_event_detail 을 읽어 해당 행사로 이동.
+         */
+        @JavascriptInterface
+        public boolean consumeLongPressReturn() {
+            boolean was = pendingLongPressReturn;
+            pendingLongPressReturn = false;
+            return was;
         }
 
         // ══════════════════════ APK 자동 업데이트 ══════════════════════
