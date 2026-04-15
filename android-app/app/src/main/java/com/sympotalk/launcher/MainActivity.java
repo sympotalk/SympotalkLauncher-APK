@@ -99,6 +99,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * 자체 런처 도메인 여부 (host 기반 정확 매칭).
+     * - BuildConfig.CLOUDFLARE_URL host (예: sympotalklauncher-apk.pages.dev) → false
+     * - file:// 로컬 asset → false
+     * - 그 외 https → true (외부 페이지)
+     */
+    private boolean isExternalUrl(String url) {
+        if (url == null) return false;
+        if (url.startsWith("file://")) return false;
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
+        try {
+            android.net.Uri uri = android.net.Uri.parse(url);
+            String host = uri.getHost();
+            if (host == null) return false;
+            android.net.Uri proxyUri = android.net.Uri.parse(BuildConfig.CLOUDFLARE_URL);
+            String proxyHost = proxyUri.getHost();
+            return !host.equalsIgnoreCase(proxyHost);
+        } catch (Exception e) {
+            return true;   // 파싱 실패 시 보수적으로 external 처리
+        }
+    }
+
+    /**
      * 외부 웹페이지(sympopad.com 등)에 키보드 보정 JS 를 주입.
      * 해당 페이지가 자체 keyboard handling 을 안 해도 입력칸이 가상키보드 위에 보이도록 scrollIntoView.
      * setJavaScriptEnabled=true 필수 (이미 설정됨).
@@ -109,13 +131,15 @@ public class MainActivity extends AppCompatActivity {
             "(function(){" +
             "  if(window.__sympotalkKbHelper) return;" +
             "  window.__sympotalkKbHelper = true;" +
+            "  var nonTextTypes = ['button','submit','reset','checkbox','radio','file'," +
+            "    'date','time','datetime-local','month','week','color','range','hidden','image'];" +
             "  function isEditable(el){" +
             "    if(!el) return false;" +
             "    var t = el.tagName;" +
             "    if(t === 'TEXTAREA') return true;" +
             "    if(t === 'INPUT'){" +
             "      var ty = (el.type||'text').toLowerCase();" +
-            "      return ty !== 'button' && ty !== 'submit' && ty !== 'reset' && ty !== 'checkbox' && ty !== 'radio' && ty !== 'file';" +
+            "      return nonTextTypes.indexOf(ty) === -1;" +
             "    }" +
             "    return el.isContentEditable === true;" +
             "  }" +
@@ -262,8 +286,7 @@ public class MainActivity extends AppCompatActivity {
                 // 외부 웹페이지(sympopad.com 등)에는 키보드 보정 JS 주입
                 // - focusin 시 입력칸을 화면 중앙으로 scroll
                 // - 외부 페이지가 자체 키보드 처리를 안 해도 태블릿에서 가시성 확보
-                boolean isExternal = url != null && url.startsWith("https://")
-                    && !url.contains("sympotalklauncher-apk.pages.dev");
+                boolean isExternal = isExternalUrl(url);
                 if (isExternal) {
                     injectKeyboardHelper(view);
                     // adjustPan 으로 전환: 외부 페이지는 전체 window 가 올라오는 편이 안정적
