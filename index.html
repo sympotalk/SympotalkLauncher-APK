@@ -35,6 +35,18 @@
       height: 100%;
     }
 
+    /* 가상키보드 활성 시 모달을 상단으로 이동 (입력칸이 키보드에 가려지지 않도록)
+     * - visualViewport 로 body.keyboard-open 감지 시 적용
+     * - 모달 내 input focus 시 .kb-visible 백업 적용 (visualViewport 미지원 대비) */
+    body.keyboard-open #default-pw-modal,
+    body.keyboard-open #wifi-password-modal,
+    #default-pw-modal.kb-visible,
+    #wifi-password-modal.kb-visible {
+      align-items: flex-start !important;   /* center → 상단 */
+      padding-top: 20px !important;
+      padding-bottom: calc(var(--kb-height, 0px) + 20px) !important;
+    }
+
     /* ─── Top Bar ──────────────────────────────────────── */
     #topbar {
       flex-shrink: 0;
@@ -73,16 +85,17 @@
       cursor: pointer;
     }
     #topbar-back.visible { display: flex; }
-    #keepalive-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #22c55e;
+    #topbar-version {
       flex-shrink: 0;
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      font-family: 'SF Mono', Consolas, monospace;
+      padding: 3px 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      letter-spacing: 0.3px;
     }
 
     /* ─── Main Content ─────────────────────────────────── */
@@ -685,7 +698,7 @@
     </button>
     <div id="topbar-logo">Sympotalk</div>
     <div id="topbar-title">행사 런처</div>
-    <div id="keepalive-dot" title="실행 중"></div>
+    <span id="topbar-version" title="현재 설치된 APK 버전">-</span>
   </header>
 
   <!-- ── Main Content ────────────────────────────────── -->
@@ -2644,19 +2657,53 @@ document.addEventListener('DOMContentLoaded', function() {
   // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
   setTimeout(checkInstallOutcome, 800);
 
-  // 가상키보드로 입력칸이 가려지지 않게: focus 시 해당 input 을 화면 중앙으로 스크롤
+  // 헤더 우측 버전 표기 (네이티브 버전)
+  var tbVer = document.getElementById('topbar-version');
+  if (tbVer) {
+    if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
+      try { tbVer.textContent = 'v' + AndroidBridge.getAppVersion(); } catch(e) { tbVer.textContent = 'v-'; }
+    } else {
+      tbVer.textContent = 'web';
+    }
+  }
+
+  // ═══ 가상키보드 상태 전역 감지 (visualViewport API) ═══
+  // keyboard-open 클래스를 body 에 토글 → CSS 로 모달 위치 조정
+  function syncKeyboardState() {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    var kbHeight = Math.max(0, window.innerHeight - vv.height);
+    if (kbHeight > 100) {
+      document.body.classList.add('keyboard-open');
+      document.documentElement.style.setProperty('--kb-height', kbHeight + 'px');
+    } else {
+      document.body.classList.remove('keyboard-open');
+      document.documentElement.style.setProperty('--kb-height', '0px');
+    }
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncKeyboardState);
+    window.visualViewport.addEventListener('scroll', syncKeyboardState);
+  }
+
+  // 입력칸 포커스 시 스크롤 + 모달이면 상단 정렬 전환
   document.addEventListener('focusin', function(e) {
     var tag = (e.target && e.target.tagName) || '';
     if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
-    // 키보드가 화면에 나타나는데 ~350ms 소요 → 기다렸다가 스크롤
+    // 모달 내부 입력이면 모달에 kb-visible 클래스 추가 (상단 정렬)
+    var modal = e.target.closest('#default-pw-modal, #wifi-password-modal');
+    if (modal) modal.classList.add('kb-visible');
+    // 키보드 애니메이션 후 입력칸을 화면 중앙으로
     setTimeout(function() {
-      try {
-        e.target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      } catch(ex) {
-        // 구형 WebView: smooth/options 미지원
-        try { e.target.scrollIntoView(); } catch(_) {}
-      }
+      try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      catch(ex) { try { e.target.scrollIntoView(); } catch(_) {} }
     }, 350);
+  });
+  document.addEventListener('focusout', function(e) {
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+    var modal = e.target.closest('#default-pw-modal, #wifi-password-modal');
+    if (modal) modal.classList.remove('kb-visible');
   });
 
   // 버전 표시 (version.txt 동적 로드)
