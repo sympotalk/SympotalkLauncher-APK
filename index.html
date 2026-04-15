@@ -192,9 +192,21 @@
       gap: 3px;
       font-size: 14px;          /* 기존 12px → 14px 증가 */
       color: #cbd5e1;
-      flex-shrink: 0;
-      min-width: 160px;
+      flex-shrink: 1;           /* 좁은 화면에서는 축소 허용 */
+      min-width: 120px;
       max-width: 220px;
+    }
+    /* 좁은 화면(420px 이하) — 카드를 세로 스택으로 전환 */
+    @media (max-width: 420px) {
+      .event-card { flex-wrap: wrap; gap: 8px; }
+      .event-name-col { flex: 1 1 100%; }
+      .event-meta-col {
+        flex: 1 1 auto;
+        font-size: 13px;
+        min-width: auto;
+      }
+      .event-meta-col > div { text-align: left; }
+      .event-badge-col { margin-left: auto; }
     }
     .event-meta-col > div {
       white-space: nowrap;
@@ -2498,10 +2510,14 @@ document.addEventListener('DOMContentLoaded', function() {
       var persisted = localStorage.getItem('last_event_detail');
       if (persisted) {
         setTimeout(function() {
-          try { openEventDetail(JSON.parse(persisted)); } catch(e) {}
+          try {
+            var ev = JSON.parse(persisted);
+            openEventDetail(ev);
+            showToast('↩ 행사 상세로 돌아왔습니다');
+          } catch(e) {}
         }, 400);
       } else {
-        showToast('최근 본 행사가 없습니다');
+        showToast('최근 본 행사가 없습니다 — 행사 목록으로 이동');
       }
     }
   } catch(e) {}

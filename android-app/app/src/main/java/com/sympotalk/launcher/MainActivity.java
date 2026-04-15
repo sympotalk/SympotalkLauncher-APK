@@ -36,7 +36,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_LOCATION = 1002;
     private static final int REQ_STARTUP = 1003;
     private boolean hasEverRequestedLocation = false;   // 최초 요청 플래그
-    private boolean pendingLongPressReturn = false;      // Long-press BACK → 행사상세 복귀용
+    private volatile boolean pendingLongPressReturn = false;   // Long-press BACK → 행사상세 복귀용
+                                                               // volatile: main thread(onKeyLongPress)와
+                                                               //          JS bridge thread(consumeLongPressReturn) 간 가시성 확보
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -293,8 +295,8 @@ public class MainActivity extends AppCompatActivity {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             pendingLongPressReturn = true;
             // sympopad.com 등 외부 URL 에 있을 수 있으므로 런처 HTML 재로드
+            // Toast 는 JS 쪽에 위임 — 행사 이력 유무에 따라 다른 메시지를 표시하기 위함
             runOnUiThread(this::loadApp);
-            Toast.makeText(this, "행사 상세로 돌아갑니다", Toast.LENGTH_SHORT).show();
             return true;
         }
         return super.onKeyLongPress(keyCode, event);
