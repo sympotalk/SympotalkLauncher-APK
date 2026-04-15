@@ -74,8 +74,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 가상키보드가 닫힐 때 Immersive(전체화면) 모드가 자동 복구되지 않는 문제 대응.
-     * ViewTreeObserver 로 visible frame 높이를 감시 → 키보드가 접히면 Immersive 재적용.
+     * 키보드 상태에 따라 Immersive 플래그를 동적으로 전환:
+     *   - 키보드 닫힘: LAYOUT_FULLSCREEN + LAYOUT_HIDE_NAVIGATION 포함 (edge-to-edge 외관)
+     *   - 키보드 열림: LAYOUT_* 플래그 제거 (adjustResize 가 실제로 viewport 축소하게 함)
+     * 이를 통해 평상시엔 공백 없이 전체화면, 키보드 사용 시엔 입력창이 가려지지 않음.
      */
     private void setupKeyboardImmersiveHandler() {
         final View decor = getWindow().getDecorView();
@@ -84,10 +86,12 @@ public class MainActivity extends AppCompatActivity {
             decor.getWindowVisibleDisplayFrame(r);
             int rootHeight = decor.getRootView().getHeight();
             int visibleHeight = r.bottom - r.top;
-            // visibleHeight < rootHeight * 0.85 이면 키보드가 열린 것으로 간주
-            // 반대로 0.85 이상이면 키보드 닫힘 → Immersive 재적용
-            if (rootHeight > 0 && (double) visibleHeight / rootHeight >= 0.85) {
-                applyImmersiveFlags();
+            if (rootHeight <= 0) return;
+            double ratio = (double) visibleHeight / rootHeight;
+            if (ratio >= 0.85) {
+                applyImmersiveFlags();            // 키보드 닫힘 → edge-to-edge
+            } else {
+                applyKeyboardFriendlyFlags();     // 키보드 열림 → viewport 축소 허용
             }
         });
     }
@@ -149,13 +153,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Immersive Sticky + Fullscreen + Hide Navigation
-     * ⚠️ LAYOUT_FULLSCREEN / LAYOUT_HIDE_NAVIGATION 는 **의도적으로 제외**:
-     *   이 플래그가 켜지면 레이아웃이 전체 화면으로 고정되어
-     *   windowSoftInputMode=adjustResize 가 실제 viewport 를 축소하지 못함
-     *   → 가상키보드가 입력창을 덮는 증상 발생
+     * 평상시 (키보드 닫힘) 전체화면 플래그 — edge-to-edge 외관
+     * LAYOUT_FULLSCREEN / LAYOUT_HIDE_NAVIGATION 포함으로 콘텐츠가 상태바/내비바 영역까지 채움
      */
     private void applyImmersiveFlags() {
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
+            View.SYSTEM_UI_FLAG_FULLSCREEN           |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION      |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE        |
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN    |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        );
+    }
+
+    /**
+     * 키보드 열림 시 사용하는 플래그 — LAYOUT_FULLSCREEN / LAYOUT_HIDE_NAVIGATION 제거
+     * windowSoftInputMode=adjustResize 가 실제 viewport 를 축소하도록 허용
+     * → 입력창이 키보드 뒤에 숨지 않고 키보드 바로 위에 보임
+     */
+    private void applyKeyboardFriendlyFlags() {
         getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
             View.SYSTEM_UI_FLAG_FULLSCREEN       |
