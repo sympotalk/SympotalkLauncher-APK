@@ -27,11 +27,12 @@
     }
 
     /* ─── Layout ───────────────────────────────────────── */
+    /* 100vh 대신 100% 사용 — Android adjustResize 시 viewport 변경을 반영해 bottomnav 가 항상 보임 */
     #app {
       display: flex;
       flex-direction: column;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
     }
 
     /* ─── Top Bar ──────────────────────────────────────── */
@@ -2642,6 +2643,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
   setTimeout(checkInstallOutcome, 800);
+
+  // 가상키보드로 입력칸이 가려지지 않게: focus 시 해당 input 을 화면 중앙으로 스크롤
+  document.addEventListener('focusin', function(e) {
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+    // 키보드가 화면에 나타나는데 ~350ms 소요 → 기다렸다가 스크롤
+    setTimeout(function() {
+      try {
+        e.target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch(ex) {
+        // 구형 WebView: smooth/options 미지원
+        try { e.target.scrollIntoView(); } catch(_) {}
+      }
+    }, 350);
+  });
 
   // 버전 표시 (version.txt 동적 로드)
   // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용

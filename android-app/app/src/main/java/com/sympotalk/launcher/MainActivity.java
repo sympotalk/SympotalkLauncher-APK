@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.DhcpInfo;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
@@ -13,6 +14,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.Toast;
@@ -72,8 +74,40 @@ public class MainActivity extends AppCompatActivity {
         wifiHelper = new WifiHelper(this);
         appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
         setupWebView();
-        checkStartupPermissions();     // 카메라 + 위치 권한 동시 요청
+        setupKeyboardImmersiveHandler();   // 키보드 닫히면 전체화면 모드 복구
+        checkStartupPermissions();
         checkForUpdates();
+    }
+
+    /**
+     * 가상키보드가 닫힐 때 Immersive(전체화면) 모드가 자동 복구되지 않는 문제 대응.
+     * ViewTreeObserver 로 visible frame 높이를 감시 → 키보드가 접히면 Immersive 재적용.
+     */
+    private void setupKeyboardImmersiveHandler() {
+        final View decor = getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            Rect r = new Rect();
+            decor.getWindowVisibleDisplayFrame(r);
+            int rootHeight = decor.getRootView().getHeight();
+            int visibleHeight = r.bottom - r.top;
+            // visibleHeight < rootHeight * 0.85 이면 키보드가 열린 것으로 간주
+            // 반대로 0.85 이상이면 키보드 닫힘 → Immersive 재적용
+            if (rootHeight > 0 && (double) visibleHeight / rootHeight >= 0.85) {
+                applyImmersiveFlags();
+            }
+        });
+    }
+
+    /** Immersive + Fullscreen + Hide Navigation 플래그 한꺼번에 설정 */
+    private void applyImmersiveFlags() {
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
+            View.SYSTEM_UI_FLAG_FULLSCREEN           |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION      |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE        |
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN    |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        );
     }
 
     /**
@@ -660,15 +694,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        // 포커스 복귀 시 몰입 모드 유지
-        if (hasFocus) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
-                View.SYSTEM_UI_FLAG_FULLSCREEN           |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION      |
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE        |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            );
-        }
+        if (hasFocus) applyImmersiveFlags();
     }
 }
