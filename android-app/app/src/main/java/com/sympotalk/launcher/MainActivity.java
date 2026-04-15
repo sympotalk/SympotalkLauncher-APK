@@ -52,15 +52,8 @@ public class MainActivity extends AppCompatActivity {
             WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
         );
 
-        // 전체화면 몰입 모드
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
-            View.SYSTEM_UI_FLAG_FULLSCREEN           |
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION      |
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE        |
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN    |
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-        );
+        // 전체화면 몰입 모드 (applyImmersiveFlags 와 동일 플래그)
+        // LAYOUT_FULLSCREEN 미포함: adjustResize 가 실제 viewport 를 축소하게 만듦
 
         // 상태바/내비바 배경색
         getWindow().setStatusBarColor(Color.parseColor("#0f172a"));
@@ -74,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         wifiHelper = new WifiHelper(this);
         appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
         setupWebView();
+        applyImmersiveFlags();             // 초기 Immersive 플래그 (LAYOUT_FULLSCREEN 제외)
         setupKeyboardImmersiveHandler();   // 키보드 닫히면 전체화면 모드 복구
         checkStartupPermissions();
         checkForUpdates();
@@ -154,15 +148,19 @@ public class MainActivity extends AppCompatActivity {
         view.evaluateJavascript(js, null);
     }
 
-    /** Immersive + Fullscreen + Hide Navigation 플래그 한꺼번에 설정 */
+    /**
+     * Immersive Sticky + Fullscreen + Hide Navigation
+     * ⚠️ LAYOUT_FULLSCREEN / LAYOUT_HIDE_NAVIGATION 는 **의도적으로 제외**:
+     *   이 플래그가 켜지면 레이아웃이 전체 화면으로 고정되어
+     *   windowSoftInputMode=adjustResize 가 실제 viewport 를 축소하지 못함
+     *   → 가상키보드가 입력창을 덮는 증상 발생
+     */
     private void applyImmersiveFlags() {
         getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
-            View.SYSTEM_UI_FLAG_FULLSCREEN           |
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION      |
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE        |
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN    |
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+            View.SYSTEM_UI_FLAG_FULLSCREEN       |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION  |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         );
     }
 
@@ -283,22 +281,16 @@ public class MainActivity extends AppCompatActivity {
                 // 로드 후 몰입 모드 재적용
                 applyImmersiveFlags();
 
-                // 외부 웹페이지(sympopad.com 등)에는 키보드 보정 JS 주입
-                // - focusin 시 입력칸을 화면 중앙으로 scroll
-                // - 외부 페이지가 자체 키보드 처리를 안 해도 태블릿에서 가시성 확보
-                boolean isExternal = isExternalUrl(url);
-                if (isExternal) {
+                // 외부 웹페이지(sympopad.com 등)에 키보드 보정 JS 주입 (백업)
+                if (isExternalUrl(url)) {
                     injectKeyboardHelper(view);
-                    // adjustPan 으로 전환: 외부 페이지는 전체 window 가 올라오는 편이 안정적
-                    getWindow().setSoftInputMode(
-                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
-                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
-                } else {
-                    // 런처 자체 페이지는 adjustResize 유지 (bottomnav 가시)
-                    getWindow().setSoftInputMode(
-                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
                 }
+                // windowSoftInputMode 는 항상 ADJUST_RESIZE 로 통일
+                //   - 외부 페이지: viewport 가 키보드 위로 축소 → 입력창 자연스레 키보드 위에 보임
+                //   - 자체 페이지: bottomnav 는 body:height:100% 로 접혀도 OK
+                getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
             }
         });
 
