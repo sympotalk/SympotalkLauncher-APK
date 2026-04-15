@@ -21,7 +21,7 @@ export async function onRequest(context) {
   if (!UUID_RE.test(eventId)) return jsonError(400, 'event_id must be UUID');
 
   const upstream = new URL(SUPABASE_URL + '/rest/v1/rooms');
-  upstream.searchParams.set('select', 'id,name,slug,chair_token,console_token,moderator_token,speaker_token');
+  upstream.searchParams.set('select', 'id,name,slug,chair_token,console_token,moderator_token');
   upstream.searchParams.set('event_id', 'eq.' + eventId);
   upstream.searchParams.set('order', 'sort_order.asc.nullslast');
 
