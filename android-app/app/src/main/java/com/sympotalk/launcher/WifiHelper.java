@@ -4,16 +4,21 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.net.wifi.WifiNetworkSuggestion;
 import android.os.Build;
 import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -61,21 +66,44 @@ public class WifiHelper {
         }
     }
 
-    /** 현재 연결된 WiFi SSID 반환 (없으면 null) */
+    /**
+     * 현재 연결된 WiFi SSID 반환 (없으면 null).
+     * - Android 10+ (API 29+): ConnectivityManager + NetworkCapabilities.getTransportInfo
+     * - Android 9 (API 28): WifiManager.getConnectionInfo
+     * 위치 권한 + 위치 서비스 활성화 필수 (Android 8.1+)
+     */
     public String getCurrentSSID() {
+        String ssid = null;
         try {
-            WifiInfo info = wifiManager.getConnectionInfo();
-            if (info == null) return null;
-            String ssid = info.getSSID();
-            if (ssid == null || ssid.equals("<unknown ssid>")) return null;
-            // 따옴표 제거
-            if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
-                ssid = ssid.substring(1, ssid.length() - 1);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ 권장 경로
+                ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) {
+                    Network active = cm.getActiveNetwork();
+                    if (active != null) {
+                        NetworkCapabilities caps = cm.getNetworkCapabilities(active);
+                        if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                            Object transport = caps.getTransportInfo();
+                            if (transport instanceof WifiInfo) {
+                                ssid = ((WifiInfo) transport).getSSID();
+                            }
+                        }
+                    }
+                }
             }
-            return ssid;
+            // 폴백: 기존 API (Android 9 포함)
+            if (ssid == null || ssid.isEmpty() || "<unknown ssid>".equals(ssid)) {
+                WifiInfo info = wifiManager.getConnectionInfo();
+                if (info != null) ssid = info.getSSID();
+            }
         } catch (Exception e) {
             return null;
         }
+        if (ssid == null || ssid.isEmpty() || "<unknown ssid>".equals(ssid)) return null;
+        if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
+            ssid = ssid.substring(1, ssid.length() - 1);
+        }
+        return ssid;
     }
 
     /** 주변 WiFi 네트워크 스캔 (비동기) */
@@ -193,7 +221,11 @@ public class WifiHelper {
         return "NONE";
     }
 
-    /** WiFi 네트워크 연결 (Android 9 legacy API) */
+    /**
+     * WiFi 네트워크 연결
+     * - Android 10+ : WifiNetworkSuggestion (시스템이 알림으로 확인 → 자동 연결)
+     * - Android 9  : 레거시 WifiManager.addNetwork + enableNetwork
+     */
     public void connectToNetwork(final String ssid, final String password, final String security,
                                  final ConnectCallback callback) {
         if (wifiManager == null) {
@@ -205,12 +237,71 @@ public class WifiHelper {
             return;
         }
 
-        // Android 10+ 에서는 레거시 API 제한적 → 시스템 설정으로 유도
+        // Android 10+ → WifiNetworkSuggestion
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            callback.onConnectResult(false, "Android 10 이상에서는 시스템 WiFi 설정을 이용해주세요");
+            connectWithSuggestion(ssid, password, security, callback);
             return;
         }
 
+        // Android 9 이하 → 기존 legacy API
+        connectLegacy(ssid, password, security, callback);
+    }
+
+    /** Android 10+ WifiNetworkSuggestion 기반 연결 */
+    private void connectWithSuggestion(String ssid, String password, String security,
+                                       ConnectCallback callback) {
+        try {
+            // 현재 이미 연결된 SSID 이면 즉시 성공 처리
+            String currentSsid = getCurrentSSID();
+            if (currentSsid != null && currentSsid.equals(ssid)) {
+                callback.onConnectResult(true, ssid + " 에 이미 연결됨");
+                return;
+            }
+
+            WifiNetworkSuggestion.Builder builder = new WifiNetworkSuggestion.Builder()
+                .setSsid(ssid)
+                .setIsAppInteractionRequired(true);  // 시스템 알림 표시
+
+            String sec = security == null ? "" : security.toUpperCase();
+            if (password != null && !password.isEmpty()) {
+                if (sec.contains("WPA3")) {
+                    try { builder.setWpa3Passphrase(password); }
+                    catch (Throwable t) { builder.setWpa2Passphrase(password); }  // 미지원 기기 폴백
+                } else if (sec.contains("WPA") || sec.contains("WEP")) {
+                    builder.setWpa2Passphrase(password);
+                }
+                // Open 네트워크는 passphrase 생략
+            }
+
+            WifiNetworkSuggestion suggestion = builder.build();
+            List<WifiNetworkSuggestion> list = Collections.singletonList(suggestion);
+
+            // 같은 SSID 가 이미 제안돼 있으면 먼저 제거 (재시도 대응)
+            try { wifiManager.removeNetworkSuggestions(list); } catch (Exception ignored) {}
+
+            int status = wifiManager.addNetworkSuggestions(list);
+
+            if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
+                callback.onConnectResult(true,
+                    "\"" + ssid + "\" 제안됨 — 상단 알림의 '연결' 을 탭해주세요 (최초 1회)");
+            } else if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE) {
+                callback.onConnectResult(true,
+                    "\"" + ssid + "\" 는 이미 등록돼 있습니다 — 범위 안에 있으면 자동 연결됩니다");
+            } else if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_APP_DISALLOWED) {
+                callback.onConnectResult(false,
+                    "앱에 WiFi 추천 권한이 없습니다. '시스템 설정 → WiFi' 에서 직접 연결해주세요");
+            } else {
+                callback.onConnectResult(false,
+                    "WiFi 제안 실패 (코드 " + status + ") — '시스템 설정' 에서 직접 연결해주세요");
+            }
+        } catch (Exception e) {
+            callback.onConnectResult(false, "오류: " + e.getMessage());
+        }
+    }
+
+    /** Android 9 이하 legacy 연결 */
+    private void connectLegacy(final String ssid, final String password, final String security,
+                               final ConnectCallback callback) {
         try {
             WifiConfiguration config = buildConfig(ssid, password, security);
 

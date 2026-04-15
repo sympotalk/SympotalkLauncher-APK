@@ -1281,15 +1281,19 @@ window.onWifiConnectResult = function(success, msg) {
   var statusEl = document.getElementById('wifi-scan-status');
   closeWifiPasswordModal();
   if (success) {
-    showToast('WiFi 연결 시도 중: ' + (msg || ''));
-    if (statusEl) statusEl.textContent = '✅ ' + (msg || '연결됨');
-    // DHCP/DNS 협상이 5초 이상 걸릴 수 있어 2회 polling
+    showToast(msg || 'WiFi 연결 시도 중');
+    if (statusEl) {
+      // Android 10+ 알림 안내면 링크 버튼도 제공
+      var hasNotice = msg && msg.indexOf('알림') !== -1;
+      statusEl.innerHTML = '✅ ' + escHtml(msg || '연결됨') +
+        (hasNotice ? '<br><button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정 열기</button>' : '');
+    }
     setTimeout(updateCurrentWifi, 2000);
     setTimeout(updateCurrentWifi, 5000);
-    setTimeout(refreshWifiList, 5000);
+    setTimeout(refreshWifiList, 6000);
     return;
   }
-  // 시스템에 이미 저장된 프로필 충돌 → 시스템 설정으로 유도
+  // 시스템에 이미 저장된 프로필 충돌 (Android 9 legacy)
   if (msg && msg.indexOf('SYSTEM_PROFILE_EXISTS|') === 0) {
     var conflictSsid = msg.split('|')[1] || '';
     if (statusEl) {
@@ -1299,7 +1303,10 @@ window.onWifiConnectResult = function(success, msg) {
     }
     return;
   }
-  if (statusEl) statusEl.textContent = '❌ ' + (msg || '연결 실패');
+  if (statusEl) {
+    statusEl.innerHTML = '❌ ' + escHtml(msg || '연결 실패') +
+      '<br><button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정</button>';
+  }
 };
 
 function selectWifi(network) {
