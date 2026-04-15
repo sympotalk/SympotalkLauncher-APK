@@ -835,9 +835,9 @@
           <div id="wifi-list" style="display:none;margin-top:8px;max-height:420px;overflow-y:auto;border-radius:10px"></div>
         </div>
 
-        <!-- 기본 비밀번호 변경 모달 (신규) -->
+        <!-- 기본 비밀번호 변경 모달 — backdrop 클릭 닫기 제거
+             (키보드 활성 시 layout shift 로 touchend 가 backdrop 에 떨어지는 race 방지) -->
         <div id="default-pw-modal"
-          onclick="if(event.target===this) closeDefaultPwModal()"
           style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
           <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
             <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:4px">🔑 기본 WiFi 비밀번호</div>

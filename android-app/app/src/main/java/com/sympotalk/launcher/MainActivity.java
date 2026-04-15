@@ -98,6 +98,38 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * 외부 웹페이지(sympopad.com 등)에 키보드 보정 JS 를 주입.
+     * 해당 페이지가 자체 keyboard handling 을 안 해도 입력칸이 가상키보드 위에 보이도록 scrollIntoView.
+     * setJavaScriptEnabled=true 필수 (이미 설정됨).
+     */
+    private void injectKeyboardHelper(WebView view) {
+        // 한 번만 바인딩되게 global flag 체크 + 지연 스크롤
+        String js =
+            "(function(){" +
+            "  if(window.__sympotalkKbHelper) return;" +
+            "  window.__sympotalkKbHelper = true;" +
+            "  function isEditable(el){" +
+            "    if(!el) return false;" +
+            "    var t = el.tagName;" +
+            "    if(t === 'TEXTAREA') return true;" +
+            "    if(t === 'INPUT'){" +
+            "      var ty = (el.type||'text').toLowerCase();" +
+            "      return ty !== 'button' && ty !== 'submit' && ty !== 'reset' && ty !== 'checkbox' && ty !== 'radio' && ty !== 'file';" +
+            "    }" +
+            "    return el.isContentEditable === true;" +
+            "  }" +
+            "  document.addEventListener('focusin', function(e){" +
+            "    if(!isEditable(e.target)) return;" +
+            "    setTimeout(function(){" +
+            "      try { e.target.scrollIntoView({block:'center', behavior:'smooth'}); }" +
+            "      catch(ex) { try { e.target.scrollIntoView(); } catch(_){} }" +
+            "    }, 400);" +
+            "  }, true);" +
+            "})();";
+        view.evaluateJavascript(js, null);
+    }
+
     /** Immersive + Fullscreen + Hide Navigation 플래그 한꺼번에 설정 */
     private void applyImmersiveFlags() {
         getWindow().getDecorView().setSystemUiVisibility(
@@ -224,12 +256,26 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 로드 후 몰입 모드 재적용 (일부 페이지 전환 후 UI가 보일 수 있음)
-                view.setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY     |
-                    View.SYSTEM_UI_FLAG_FULLSCREEN           |
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                );
+                // 로드 후 몰입 모드 재적용
+                applyImmersiveFlags();
+
+                // 외부 웹페이지(sympopad.com 등)에는 키보드 보정 JS 주입
+                // - focusin 시 입력칸을 화면 중앙으로 scroll
+                // - 외부 페이지가 자체 키보드 처리를 안 해도 태블릿에서 가시성 확보
+                boolean isExternal = url != null && url.startsWith("https://")
+                    && !url.contains("sympotalklauncher-apk.pages.dev");
+                if (isExternal) {
+                    injectKeyboardHelper(view);
+                    // adjustPan 으로 전환: 외부 페이지는 전체 window 가 올라오는 편이 안정적
+                    getWindow().setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
+                } else {
+                    // 런처 자체 페이지는 adjustResize 유지 (bottomnav 가시)
+                    getWindow().setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
+                }
             }
         });
 
