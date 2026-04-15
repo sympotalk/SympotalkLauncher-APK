@@ -11,6 +11,10 @@
     <!-- WiFi 스캔 결과를 받으려면 위치 권한 필요 (Android 9) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 13+ (API 33) WiFi 스캔/제안 API 요구 권한 -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="tiramisu" />
 
     <!-- 카메라 (QR 링크 스캐너) -->
     <uses-permission android:name="android.permission.CAMERA" />

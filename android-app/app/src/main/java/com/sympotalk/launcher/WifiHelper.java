@@ -141,7 +141,12 @@ public class WifiHelper {
         };
 
         IntentFilter filter = new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-        context.registerReceiver(scanReceiver, filter);
+        // Android 13+ (API 33) 부터 registerReceiver flag 필수
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(scanReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            context.registerReceiver(scanReceiver, filter);
+        }
 
         boolean started;
         try {
@@ -281,18 +286,15 @@ public class WifiHelper {
 
             int status = wifiManager.addNetworkSuggestions(list);
 
+            // 구조화된 결과 prefix: JS 가 파싱해서 UI 분기 (문자열 매칭 취약성 회피)
             if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) {
-                callback.onConnectResult(true,
-                    "\"" + ssid + "\" 제안됨 — 상단 알림의 '연결' 을 탭해주세요 (최초 1회)");
+                callback.onConnectResult(true, "WIFI_SUGGEST_OK|" + ssid);
             } else if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE) {
-                callback.onConnectResult(true,
-                    "\"" + ssid + "\" 는 이미 등록돼 있습니다 — 범위 안에 있으면 자동 연결됩니다");
+                callback.onConnectResult(true, "WIFI_SUGGEST_DUPE|" + ssid);
             } else if (status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_APP_DISALLOWED) {
-                callback.onConnectResult(false,
-                    "앱에 WiFi 추천 권한이 없습니다. '시스템 설정 → WiFi' 에서 직접 연결해주세요");
+                callback.onConnectResult(false, "WIFI_SUGGEST_DENIED|" + ssid);
             } else {
-                callback.onConnectResult(false,
-                    "WiFi 제안 실패 (코드 " + status + ") — '시스템 설정' 에서 직접 연결해주세요");
+                callback.onConnectResult(false, "WIFI_SUGGEST_FAIL|" + ssid + "|" + status);
             }
         } catch (Exception e) {
             callback.onConnectResult(false, "오류: " + e.getMessage());

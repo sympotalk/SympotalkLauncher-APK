@@ -1280,33 +1280,69 @@ window.onWifiScanError = function(msg) {
 window.onWifiConnectResult = function(success, msg) {
   var statusEl = document.getElementById('wifi-scan-status');
   closeWifiPasswordModal();
+
+  // 구조화된 메시지 파싱 (Android 10+ WifiNetworkSuggestion / Android 9 legacy)
+  var parts = (msg || '').split('|');
+  var code = parts[0] || '';
+  var ssid = parts[1] || '';
+  var extra = parts[2] || '';
+
+  var settingsBtn = '<button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정</button>';
+
+  // Android 10+ 성공 케이스 (알림 승인 대기)
+  if (success && code === 'WIFI_SUGGEST_OK') {
+    if (statusEl) statusEl.innerHTML =
+      '✅ <strong>' + escHtml(ssid) + '</strong> 제안됨<br>' +
+      '<span style="font-size:12px;color:#cbd5e1">상단 알림바의 [연결] 을 탭하세요 (최초 1회)</span><br>' +
+      settingsBtn;
+    showToast('WiFi 제안됨 — 알림 확인');
+    // Android 10+ 는 사용자 승인에 시간 필요 → 지연 연장 (15s, 30s)
+    setTimeout(updateCurrentWifi, 15000);
+    setTimeout(updateCurrentWifi, 30000);
+    return;
+  }
+  // Android 10+ 이미 등록된 경우
+  if (success && code === 'WIFI_SUGGEST_DUPE') {
+    if (statusEl) statusEl.innerHTML =
+      'ℹ️ <strong>' + escHtml(ssid) + '</strong> 는 이미 등록돼 있습니다<br>' +
+      '<span style="font-size:12px;color:#cbd5e1">범위 안에 있으면 자동 연결됩니다</span><br>' +
+      settingsBtn;
+    setTimeout(updateCurrentWifi, 3000);
+    setTimeout(updateCurrentWifi, 10000);
+    return;
+  }
+  // Android 9 직접 연결 성공 (기존 경로)
   if (success) {
     showToast(msg || 'WiFi 연결 시도 중');
-    if (statusEl) {
-      // Android 10+ 알림 안내면 링크 버튼도 제공
-      var hasNotice = msg && msg.indexOf('알림') !== -1;
-      statusEl.innerHTML = '✅ ' + escHtml(msg || '연결됨') +
-        (hasNotice ? '<br><button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정 열기</button>' : '');
-    }
+    if (statusEl) statusEl.textContent = '✅ ' + (msg || '연결됨');
     setTimeout(updateCurrentWifi, 2000);
     setTimeout(updateCurrentWifi, 5000);
     setTimeout(refreshWifiList, 6000);
     return;
   }
-  // 시스템에 이미 저장된 프로필 충돌 (Android 9 legacy)
-  if (msg && msg.indexOf('SYSTEM_PROFILE_EXISTS|') === 0) {
-    var conflictSsid = msg.split('|')[1] || '';
-    if (statusEl) {
-      statusEl.innerHTML = '⚠️ "<strong>' + escHtml(conflictSsid) + '</strong>"가 이미 시스템에 저장되어 있습니다.<br>' +
-        '<button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:8px 14px;width:auto" ' +
-        'onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정에서 연결</button>';
-    }
+
+  // 실패 케이스들
+  if (code === 'WIFI_SUGGEST_DENIED') {
+    if (statusEl) statusEl.innerHTML =
+      '❌ 앱에 WiFi 추천 권한이 없습니다<br>' +
+      '<span style="font-size:12px;color:#cbd5e1">시스템 설정에서 WiFi 에 직접 연결해주세요</span><br>' +
+      settingsBtn;
     return;
   }
-  if (statusEl) {
-    statusEl.innerHTML = '❌ ' + escHtml(msg || '연결 실패') +
-      '<br><button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정</button>';
+  if (code === 'WIFI_SUGGEST_FAIL') {
+    if (statusEl) statusEl.innerHTML =
+      '❌ WiFi 제안 실패 (코드 ' + escHtml(extra) + ')<br>' + settingsBtn;
+    return;
   }
+  if (code === 'SYSTEM_PROFILE_EXISTS') {
+    if (statusEl) statusEl.innerHTML =
+      '⚠️ "<strong>' + escHtml(ssid) + '</strong>"가 이미 시스템에 저장되어 있습니다<br>' +
+      '<span style="font-size:12px;color:#cbd5e1">시스템 설정에서 해당 WiFi "잊기" 후 재시도</span><br>' +
+      settingsBtn;
+    return;
+  }
+  // 기타 일반 실패
+  if (statusEl) statusEl.innerHTML = '❌ ' + escHtml(msg || '연결 실패') + '<br>' + settingsBtn;
 };
 
 function selectWifi(network) {
