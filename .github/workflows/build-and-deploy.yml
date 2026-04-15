@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write   # Release 생성/업데이트 권한
 
+# Node.js 20 → 24 선제 전환 (2026-06-02 자동 강제 전환 대비)
+# action 이 명시적으로 Node 24 를 지원하지 않아도 대부분 호환됨
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-apk:
     name: Build Android APK
