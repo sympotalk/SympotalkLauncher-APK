@@ -1021,9 +1021,7 @@ var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 var BASE_URL = 'https://sympopad.com';                            // 참석자/운영자 링크 기본 주소
 var PROXY_URL = 'https://sympotalklauncher-apk.pages.dev';         // Cloudflare Pages Functions 프록시
 var GITHUB_REPO = 'sympotalk/SympotalkLauncher-APK';               // 앱 릴리즈/업데이트 소스
-// 300~500대 규모 대응: auto 갱신 10분, 지터로 Thundering Herd 방지
-var REFRESH_INTERVAL = 10 * 60 * 1000;   // 10분 (± 최대 30초 지터)
-var REFRESH_JITTER   = 30 * 1000;        // 30초 이내 랜덤 분산
+// 자동 갱신 제거됨 (v1.0.31+) — 사용자가 새로고침 버튼으로만 갱신
 
 // Android APK 에서 주입되는 Native 브릿지 (JS Interface)
 var hasNativeBridge = (typeof AndroidBridge !== 'undefined');
@@ -1039,7 +1037,7 @@ var state = {
   scannerStream: null,
   scannerRAF: null,
   wakeLock: null,
-  refreshTimer: null
+  // refreshTimer 제거됨 (v1.0.31+)
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -1947,36 +1945,20 @@ function requestWakeLock() {
   showToast('절전 방지 활성화됨');
 }
 
-// 페이지 재활성화 시 wakeLock 재요청
+// 페이지 재활성화 시 wakeLock 재요청 (행사 목록 자동 갱신 없음 — v1.0.31+)
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible') {
     if (!state.wakeLock || state.wakeLock.released) {
       enableNoSleep();
     }
-    // 행사 목록 자동 갱신
-    if (state.currentView === 'home') {
-      loadEvents();
-    }
   }
 });
 
 /* ═══════════════════════════════════════════════════════
-   REFRESH TIMER (지터로 Thundering Herd 방지)
-   - keepalive Supabase 핑은 완전 제거 (효과 없음 + 부하)
-   - Service Worker 핑만 유지 (앱 프로세스 keepalive)
+   AUTO-REFRESH 제거됨 (v1.0.31+)
+   - 사용자가 상단 "새로고침" 버튼으로만 갱신
+   - visibilitychange 시에도 갱신 안 함 (앱으로 복귀해도 자동 로드 X)
 ═══════════════════════════════════════════════════════ */
-function startRefreshLoop() {
-  // init() 에서 즉시 1회 loadEvents 하므로, 첫 tick 은 full interval + 지터 대기
-  // (부팅 직후 500대 이중 히트 방지)
-  function scheduleNext() {
-    var nextDelay = REFRESH_INTERVAL + Math.floor(Math.random() * REFRESH_JITTER);
-    state.refreshTimer = setTimeout(function tick() {
-      if (state.currentView === 'home') loadEvents();
-      scheduleNext();
-    }, nextDelay);
-  }
-  scheduleNext();
-}
 
 // Service Worker 로만 keepalive (Supabase 핑 제거)
 function startSWKeepalive() {
@@ -2615,7 +2597,7 @@ document.addEventListener('DOMContentLoaded', function() {
   registerServiceWorker();
   loadEvents();
   startSWKeepalive();   // Service Worker only (Supabase 핑 제거)
-  startRefreshLoop();   // 지터 적용된 10분 주기
+  // 행사 목록 자동 갱신 제거 (v1.0.31+) — 사용자가 새로고침 버튼으로만 갱신
 
   // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
   setTimeout(checkInstallOutcome, 800);
