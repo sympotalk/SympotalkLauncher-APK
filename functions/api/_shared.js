@@ -22,6 +22,8 @@ export function buildResponseHeaders(extraCacheSeconds = 15) {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    // JS 에서 캐시 상태·POP 확인 가능하도록 노출
+    'Access-Control-Expose-Headers': 'CF-Ray, X-Cache, X-Proxy-Version',
     'X-Proxy-Version': '1.0'
   };
 }

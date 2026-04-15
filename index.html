@@ -822,7 +822,9 @@
         </div>
 
         <!-- 기본 비밀번호 변경 모달 (신규) -->
-        <div id="default-pw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
+        <div id="default-pw-modal"
+          onclick="if(event.target===this) closeDefaultPwModal()"
+          style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
           <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
             <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:4px">🔑 기본 WiFi 비밀번호</div>
             <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">
@@ -956,8 +958,8 @@
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">WebView</span> <span id="info-webview" style="color:#cbd5e1">-</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">프록시 캐시</span> <span id="info-proxy-cache" style="color:#cbd5e1">-</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">마지막 체크</span> <span id="info-last-check" style="color:#64748b;font-size:11px">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Supabase</span> <span style="color:#cbd5e1">sympotalkv2</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">GitHub</span> <span style="color:#cbd5e1;font-size:11px">sympotalk/SympotalkLauncher-APK</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Supabase</span> <span id="info-supabase" style="color:#cbd5e1;font-size:11px">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">GitHub</span> <span id="info-github" style="color:#cbd5e1;font-size:11px">-</span></div>
             </div>
           </div>
         </div>
@@ -1013,6 +1015,7 @@ var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';   // Fallback onl
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHFuZnd1dmhsYW90dGNucGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2OTYxMzMsImV4cCI6MjA4MzI3MjEzM30.F6pA27vkaAJFjK54vkYPbOI7K1LE2tQFVaPG-bA8r3c';
 var BASE_URL = 'https://sympopad.com';                            // 참석자/운영자 링크 기본 주소
 var PROXY_URL = 'https://sympotalklauncher-apk.pages.dev';         // Cloudflare Pages Functions 프록시
+var GITHUB_REPO = 'sympotalk/SympotalkLauncher-APK';               // 앱 릴리즈/업데이트 소스
 // 300~500대 규모 대응: auto 갱신 10분, 지터로 Thundering Herd 방지
 var REFRESH_INTERVAL = 10 * 60 * 1000;   // 10분 (± 최대 30초 지터)
 var REFRESH_JITTER   = 30 * 1000;        // 30초 이내 랜덤 분산
@@ -1085,7 +1088,7 @@ function saveDefaultPasswordFromModal() {
   closeDefaultPwModal();
 }
 function resetDefaultPassword() {
-  if (confirm('하드코딩된 기본 비밀번호(' + DEFAULT_WIFI_PASSWORD + ')로 복원하시겠습니까?')) {
+  if (confirm('기본 비밀번호로 복원하시겠습니까?\n(현재 저장된 사용자 비밀번호가 지워지고 앱 기본값이 적용됩니다)')) {
     localStorage.removeItem('default_wifi_pw');
     showToast('기본 비밀번호로 복원되었습니다');
     refreshWifiListUIFromCache();
@@ -2224,9 +2227,8 @@ function updateCurrentAppVersion() {
 }
 
 // 간이 마크다운 → HTML 렌더링 (GitHub release body 용)
-//   - 헤더 (#, ##, ###), 리스트 (-, *), 볼드 (**text**), 이탤릭 (*text*, _text_)
-//   - 인라인 코드 (`code`), 줄바꿈, URL 자동 링크
-// XSS 방지: 원본 텍스트를 먼저 escape 후 허용 패턴만 재구성
+// 처리 순서가 중요: 코드 블록 격리 → 헤더/리스트(블록) → 인라인(볼드/이탤릭/URL) → br
+// XSS 방지: 원본 escape 후 허용 패턴만 재구성
 function renderMarkdownLite(md) {
   if (!md) return '';
   var html = String(md)
@@ -2234,22 +2236,43 @@ function renderMarkdownLite(md) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // 코드 블록 `...` (줄바꿈 방어)
-  html = html.replace(/`([^`\n]+)`/g, '<code style="background:#0f172a;padding:1px 5px;border-radius:3px;font-size:11px;color:#93c5fd">$1</code>');
-  // 헤더 ### ## #
+  // 1) 코드 블록을 먼저 placeholder 로 분리 (이후 치환에서 보호)
+  var codeStash = [];
+  html = html.replace(/`([^`\n]+)`/g, function(_, code) {
+    codeStash.push(code);
+    return '\u0001CODE' + (codeStash.length - 1) + '\u0001';
+  });
+
+  // 2) 블록 요소: 헤더, 리스트 (multiline)
   html = html.replace(/^###\s+(.+)$/gm, '<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin:6px 0 3px">$1</div>');
   html = html.replace(/^##\s+(.+)$/gm,  '<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin:8px 0 4px">$1</div>');
   html = html.replace(/^#\s+(.+)$/gm,   '<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 4px">$1</div>');
-  // 볼드 **
-  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>');
-  // 이탤릭 _text_ or *text*
-  html = html.replace(/(^|\s)_([^_\n]+)_/g, '$1<em style="color:#cbd5e1">$2</em>');
-  // 리스트 항목 -
   html = html.replace(/^[-*]\s+(.+)$/gm, '<div style="padding-left:14px;position:relative"><span style="position:absolute;left:0">•</span>$1</div>');
-  // URL 자동 링크
-  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#60a5fa" target="_blank">$1</a>');
-  // 줄바꿈
+
+  // 3) 인라인: 볼드 → 이탤릭
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>');
+  html = html.replace(/(^|\s)_([^_\n]+)_/g, '$1<em style="color:#cbd5e1">$2</em>');
+
+  // 4) URL 자동 링크 — 후행 문장부호는 링크에서 제외
+  html = html.replace(/https?:\/\/[^\s<]+/g, function(url) {
+    var trailing = '';
+    while (url.length > 0 && /[.,;:!?)\]]/.test(url.slice(-1))) {
+      trailing = url.slice(-1) + trailing;
+      url = url.slice(0, -1);
+    }
+    return '<a href="' + url + '" style="color:#60a5fa" target="_blank">' + url + '</a>' + trailing;
+  });
+
+  // 5) 블록 요소 뒤 개행 정리 + 나머지 \n → <br>
+  html = html.replace(/<\/div>\n/g, '</div>');
   html = html.replace(/\n/g, '<br>');
+
+  // 6) 코드 블록 복원 (escape 된 상태 그대로)
+  html = html.replace(/\u0001CODE(\d+)\u0001/g, function(_, idx) {
+    return '<code style="background:#0f172a;padding:1px 5px;border-radius:3px;font-size:11px;color:#93c5fd">' +
+      codeStash[parseInt(idx, 10)] + '</code>';
+  });
+
   return html;
 }
 
@@ -2490,11 +2513,21 @@ function loadAppInfo() {
     cacheEl.textContent = '확인 중...';
     fetch(PROXY_URL + '/api/health', { cache: 'no-store' })
       .then(function(r) {
-        var cf = r.headers.get('CF-Ray') ? 'Cloudflare POP' : '—';
-        cacheEl.textContent = r.ok ? '정상 · ' + cf : '응답 ' + r.status;
+        if (!r.ok) { cacheEl.textContent = '응답 ' + r.status; return; }
+        var cf = r.headers.get('CF-Ray');
+        cacheEl.textContent = cf ? '정상 · ' + cf.split('-')[1] : '정상';
       })
       .catch(function() { cacheEl.textContent = '연결 실패'; });
   }
+
+  // Supabase / GitHub — 상수에서 동적으로 주입 (하드코딩 방지)
+  var supaEl = document.getElementById('info-supabase');
+  if (supaEl) {
+    var m = SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/);
+    supaEl.textContent = m ? m[1] + '.supabase.co' : SUPABASE_URL;
+  }
+  var ghEl = document.getElementById('info-github');
+  if (ghEl) ghEl.textContent = GITHUB_REPO;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2561,14 +2594,6 @@ document.addEventListener('DOMContentLoaded', function() {
   loadEvents();
   startSWKeepalive();   // Service Worker only (Supabase 핑 제거)
   startRefreshLoop();   // 지터 적용된 10분 주기
-
-  // 실행 환경 표시 (APK vs 웹)
-  var envEl = document.getElementById('app-env');
-  if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK (네이티브)' : '웹 브라우저';
-
-  // BASE_URL 변수를 UI에 주입 (하드코딩 방지)
-  var baseEl = document.getElementById('app-base-url');
-  if (baseEl) baseEl.textContent = BASE_URL;
 
   // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
   setTimeout(checkInstallOutcome, 800);

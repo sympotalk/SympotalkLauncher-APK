@@ -15,7 +15,8 @@ export async function onRequest(context) {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'CF-Ray, X-Cache, X-Proxy-Version'
       }
     }
   );
