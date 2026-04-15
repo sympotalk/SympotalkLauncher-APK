@@ -919,8 +919,11 @@
 
             <!-- 업데이트 발견 시 패널 -->
             <div id="app-update-available" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:12px;margin-top:8px">
-              <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:8px">
-                🆕 새 버전 <span id="app-update-avail-version">-</span>
+              <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:4px">
+                🆕 APK 업데이트: <span id="app-update-from">-</span> → <span id="app-update-avail-version">-</span>
+              </div>
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">
+                Android 네이티브 코드 + HTML 을 함께 최신으로 교체합니다
               </div>
               <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;border-bottom:1px solid #334155;padding-bottom:4px">📋 업데이트 내용</div>
               <div id="app-update-avail-notes" style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px;max-height:160px;overflow-y:auto"></div>
@@ -951,8 +954,10 @@
           <div class="settings-item app-row-col">
             <div class="settings-group-title" style="margin:0 0 8px 0">앱 정보</div>
             <div class="info-box" style="font-size:12px;line-height:1.9">
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">APK 버전</span> <strong id="info-apk-ver" style="color:#f1f5f9">-</strong></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">웹 콘텐츠</span> <span id="info-content-ver" style="color:#cbd5e1">-</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">버전</span> <strong id="info-apk-ver" style="color:#f1f5f9">-</strong></div>
+              <div id="info-hotpatch-row" style="display:none;background:rgba(96,165,250,0.08);margin:4px -6px;padding:4px 8px;border-radius:6px;font-size:11px">
+                <span style="color:#60a5fa">ℹ 웹 리소스는 <span id="info-content-ver">-</span> 로 자동 갱신됨 (APK 업데이트 시 동기화)</span>
+              </div>
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">실행 환경</span> <span id="info-env" style="color:#cbd5e1">-</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Android</span> <span id="info-android" style="color:#cbd5e1">-</span></div>
               <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">WebView</span> <span id="info-webview" style="color:#cbd5e1">-</span></div>
@@ -2315,17 +2320,23 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
 
   updateLastCheckTimestamp();
   if (status === 'available') {
-    latestEl.textContent = latestVersion;
+    latestEl.textContent = 'v' + latestVersion;
     latestEl.style.color = '#22c55e';
     statusEl.textContent = '✅ 새 버전 발견';
     document.getElementById('app-update-avail-version').textContent = 'v' + latestVersion;
-    // 간이 마크다운 렌더링 (GitHub Release body 지원)
+    // "현재 → 새 버전" 표기
+    var fromEl = document.getElementById('app-update-from');
+    if (fromEl) {
+      var cur = (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function')
+        ? ('v' + AndroidBridge.getAppVersion()) : '(현재)';
+      fromEl.textContent = cur;
+    }
     document.getElementById('app-update-avail-notes').innerHTML = renderMarkdownLite(notes || '_업데이트 내용 없음_');
     pendingApkUrl = apkUrl;
     pendingUpdateVersion = latestVersion;
     panelEl.style.display = 'block';
   } else if (status === 'uptodate') {
-    latestEl.textContent = latestVersion;
+    latestEl.textContent = 'v' + latestVersion;
     latestEl.style.color = '#94a3b8';
     statusEl.textContent = '✅ 최신 버전을 사용 중입니다';
     panelEl.style.display = 'none';
@@ -2478,20 +2489,31 @@ function loadAppInfo() {
   var envEl = document.getElementById('info-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK' : '웹 브라우저';
 
-  // 웹 콘텐츠 버전 (version.txt XHR)
+  // 웹 콘텐츠 버전은 APK 와 다를 때만 노출 (핫패치 된 경우)
+  // 같으면 숨김 → 사용자가 "버전이 왜 두 개야?" 혼동 방지
   var contentEl = document.getElementById('info-content-ver');
-  if (contentEl) {
+  var hotpatchRow = document.getElementById('info-hotpatch-row');
+  if (contentEl && hotpatchRow) {
+    var nativeVer = '';
+    try { nativeVer = (apkEl && apkEl.textContent) ? apkEl.textContent.replace(/^v/, '') : ''; } catch(e) {}
     var xhr = new XMLHttpRequest();
     try { xhr.open('GET', 'version.txt?_=' + Date.now(), true); }
-    catch(e) { contentEl.textContent = '(n/a)'; return; }
+    catch(e) { hotpatchRow.style.display = 'none'; return; }
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return;
       var ok = (xhr.status === 200 || xhr.status === 0);
-      if (ok && xhr.responseText) contentEl.textContent = 'v' + xhr.responseText.trim();
-      else contentEl.textContent = '(n/a)';
+      if (!ok || !xhr.responseText) { hotpatchRow.style.display = 'none'; return; }
+      var webVer = xhr.responseText.trim();
+      if (webVer && nativeVer && webVer !== nativeVer) {
+        // 핫패치 상태: 웹은 이미 최신인데 APK 가 구버전 → 안내만 표시
+        contentEl.textContent = 'v' + webVer;
+        hotpatchRow.style.display = 'block';
+      } else {
+        hotpatchRow.style.display = 'none';
+      }
     };
-    xhr.onerror = function() { contentEl.textContent = '(n/a)'; };
-    try { xhr.send(null); } catch(e) { contentEl.textContent = '(n/a)'; }
+    xhr.onerror = function() { hotpatchRow.style.display = 'none'; };
+    try { xhr.send(null); } catch(e) { hotpatchRow.style.display = 'none'; }
   }
 
   // Android 버전 + WebView 버전 추출
