@@ -946,6 +946,29 @@
           </div>
         </div>
 
+        <!-- 앱 로그 -->
+        <div class="settings-group">
+          <div class="settings-group-title">앱 로그</div>
+          <div class="settings-item">
+            <div class="settings-desc">
+              최근 이벤트·오류 기록 (최대 100건). 문제 발생 시 로그를 복사해 개발자에게 공유하세요.
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px" onclick="renderLogUI()">
+                🔄 새로고침
+              </button>
+              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px;background:#334155;color:#e2e8f0" onclick="copyLogs()">
+                📋 전체 복사
+              </button>
+              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px;background:#475569;color:#e2e8f0" onclick="clearLogs()">
+                🗑️ 로그 지우기
+              </button>
+            </div>
+            <div id="app-log-count" style="font-size:11px;color:#64748b;margin-bottom:6px">-</div>
+            <div id="app-log-list" style="max-height:350px;overflow-y:auto;border-radius:8px;background:#0f172a;border:1px solid #334155;padding:4px"></div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -1002,6 +1025,91 @@ var GITHUB_REPO = 'sympotalk/SympotalkLauncher-APK';               // 앱 릴리
 
 // Android APK 에서 주입되는 Native 브릿지 (JS Interface)
 var hasNativeBridge = (typeof AndroidBridge !== 'undefined');
+
+/* ═══════════════════════════════════════════════════════
+   SYMPOTALK LOG — 로컬 저장 + 사용자 친화적 설명
+   - localStorage 기반 rolling (최대 100건)
+   - 100 × ~200B ≈ 20KB 로 저장 부하 미미
+   - 기술 에러 메시지를 자동으로 이해 가능한 한국어 설명으로 번역
+═══════════════════════════════════════════════════════ */
+var SympotalkLog = {
+  MAX: 100,
+  KEY: 'sympotalk_logs_v1',
+
+  push: function(level, msg, explanation) {
+    try {
+      var logs = this.read();
+      logs.push({
+        ts: Date.now(),
+        lv: level,                                  // 'error'|'warn'|'info'|'success'
+        msg: String(msg || '').slice(0, 500),       // 원본 메시지 (최대 500자)
+        exp: explanation || this.autoExplain(msg)   // 친화적 설명
+      });
+      if (logs.length > this.MAX) logs = logs.slice(-this.MAX);
+      localStorage.setItem(this.KEY, JSON.stringify(logs));
+    } catch(e) { /* localStorage quota 등 실패 시 조용히 무시 */ }
+  },
+
+  read: function() {
+    try {
+      var raw = localStorage.getItem(this.KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+  },
+
+  clear: function() {
+    try { localStorage.removeItem(this.KEY); } catch(e) {}
+  },
+
+  /** 기술적 에러 메시지를 사용자가 이해할 수 있는 문장으로 변환 */
+  autoExplain: function(msg) {
+    if (!msg) return null;
+    var m = String(msg).toLowerCase();
+    if (m.indexOf('failed to fetch') !== -1 || m.indexOf('unable to resolve') !== -1 ||
+        m.indexOf('no address associated') !== -1 || m.indexOf('networkerror') !== -1) {
+      return '인터넷 연결이 끊어졌거나 서버에 접속할 수 없습니다. WiFi 또는 공유기 상태를 확인해주세요.';
+    }
+    if (m.indexOf('notallowederror') !== -1 || m.indexOf('permission denied') !== -1) {
+      return '필요한 권한이 거부되었습니다. 설정 → 앱 권한에서 허용해주세요.';
+    }
+    if (m.indexOf('timeout') !== -1 || m.indexOf('타임아웃') !== -1) {
+      return '서버 응답 시간이 초과됐습니다. 네트워크가 느리거나 서버가 응답하지 않습니다.';
+    }
+    if (m.indexOf('404') !== -1 || m.indexOf('not found') !== -1) {
+      return '요청한 자료를 찾을 수 없습니다. 행사 정보가 삭제됐거나 주소가 바뀌었을 수 있습니다.';
+    }
+    if (m.indexOf('500') !== -1 || m.indexOf('502') !== -1 || m.indexOf('503') !== -1 || m.indexOf('server error') !== -1) {
+      return '서버 일시 오류입니다. 몇 분 후 다시 시도해주세요.';
+    }
+    if (m.indexOf('cors') !== -1 || m.indexOf('cross-origin') !== -1) {
+      return '서버 보안 정책으로 요청이 차단됐습니다. 관리자에게 문의해주세요.';
+    }
+    if (m.indexOf('signature') !== -1 || m.indexOf('install') !== -1) {
+      return 'APK 설치 실패. 기존 앱 서명과 달라 업데이트가 거부되었습니다. 기존 앱 삭제 후 재설치해주세요.';
+    }
+    if (m.indexOf('wifi') !== -1 && (m.indexOf('fail') !== -1 || m.indexOf('denied') !== -1)) {
+      return 'WiFi 연결에 실패했습니다. 시스템 WiFi 설정에서 직접 연결해주세요.';
+    }
+    if (m.indexOf('quota') !== -1) {
+      return '앱 저장 공간이 부족합니다. 로그 지우기 또는 캐시 정리를 해주세요.';
+    }
+    if (m.indexOf('securityexception') !== -1) {
+      return 'Android 보안 정책으로 차단됐습니다. 앱 권한을 확인해주세요.';
+    }
+    return null;  // 모르는 패턴은 설명 없이 원본만 표시
+  }
+};
+
+// 글로벌 자바스크립트 에러 자동 수집
+window.addEventListener('error', function(e) {
+  var where = (e.filename ? e.filename.split('/').pop() : '?') + ':' + (e.lineno || 0);
+  SympotalkLog.push('error', (e.message || 'Unknown error') + ' (' + where + ')');
+});
+window.addEventListener('unhandledrejection', function(e) {
+  var reason = e.reason;
+  var msg = reason && reason.message ? reason.message : String(reason);
+  SympotalkLog.push('error', 'Promise 실패: ' + msg);
+});
 
 /* ═══════════════════════════════════════════════════════
    STATE
@@ -1255,6 +1363,7 @@ window.onWifiScanError = function(msg) {
 };
 
 window.onWifiConnectResult = function(success, msg) {
+  SympotalkLog.push(success ? 'success' : 'warn', 'WiFi ' + (success ? '연결 시도' : '연결 실패') + ': ' + (msg || ''));
   var statusEl = document.getElementById('wifi-scan-status');
   closeWifiPasswordModal();
 
@@ -1435,6 +1544,7 @@ function showView(name) {
     updateCurrentWifi();
     updateCurrentAppVersion();
     loadAppInfo();
+    renderLogUI();
   }
   // QR 탭 진입 시 자동으로 카메라 시작
   if (name === 'wifi') {
@@ -1532,7 +1642,8 @@ function loadEvents() {
   }).then(function(events) {
     spinner.style.display = 'none';
     renderEventList(events);
-    showNetworkBanner(false);   // 성공 시 배너 숨김
+    showNetworkBanner(false);
+    SympotalkLog.push('success', '행사 ' + (events ? events.length : 0) + '건 로드', '행사 목록이 정상적으로 갱신됐습니다.');
     var now = new Date();
     document.getElementById('last-refresh').textContent =
       '마지막 갱신: ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -1540,6 +1651,7 @@ function loadEvents() {
     spinner.style.display = 'none';
     var msg = err.message || '';
     var isNetworkError = isNetworkFailure(msg);
+    SympotalkLog.push('error', '행사 목록 로드 실패: ' + msg);
     if (isNetworkError) {
       showNetworkBanner(true, '서버에 연결할 수 없습니다. WiFi 상태를 확인해주세요.');
       container.innerHTML = '<div class="empty-msg"><div class="icon">📶</div><div style="line-height:1.6">인터넷 연결이 필요합니다<br><small style="color:#64748b">상단 WiFi 버튼 탭 → 연결 후 새로고침</small></div></div>';
@@ -2260,6 +2372,85 @@ function runSpeedTest() {
 }
 
 /* ═══════════════════════════════════════════════════════
+   APP LOG UI (설정 탭 로그 뷰어)
+═══════════════════════════════════════════════════════ */
+function renderLogUI() {
+  var logs = SympotalkLog.read();
+  var listEl = document.getElementById('app-log-list');
+  var countEl = document.getElementById('app-log-count');
+  if (!listEl) return;
+
+  countEl.textContent = logs.length + '건 (최대 ' + SympotalkLog.MAX + '건)';
+
+  if (logs.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center;color:#475569;padding:24px">기록된 로그가 없습니다</div>';
+    return;
+  }
+
+  // 최신이 위로 (역순)
+  var html = '';
+  for (var i = logs.length - 1; i >= 0; i--) {
+    var log = logs[i];
+    var d = new Date(log.ts);
+    var timeStr = String(d.getMonth()+1) + '/' + String(d.getDate()) + ' ' +
+      String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' +
+      String(d.getSeconds()).padStart(2,'0');
+
+    var icon, color, label;
+    switch (log.lv) {
+      case 'error':   icon = '🔴'; color = '#ef4444'; label = '오류'; break;
+      case 'warn':    icon = '🟡'; color = '#fbbf24'; label = '경고'; break;
+      case 'success': icon = '🟢'; color = '#22c55e'; label = '성공'; break;
+      default:        icon = '🔵'; color = '#60a5fa'; label = '정보'; break;
+    }
+
+    html += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;line-height:1.5">' +
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">' +
+        '<span>' + icon + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:' + color + '">' + label + '</span>' +
+        '<span style="margin-left:auto;font-size:10px;color:#475569">' + timeStr + '</span>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#cbd5e1;word-break:break-all">' + escHtml(log.msg) + '</div>' +
+      (log.exp ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px;padding-left:22px">💡 ' + escHtml(log.exp) + '</div>' : '') +
+    '</div>';
+  }
+  listEl.innerHTML = html;
+}
+
+function copyLogs() {
+  var logs = SympotalkLog.read();
+  var text = '=== Sympotalk 런처 앱 로그 (' + logs.length + '건) ===\n\n';
+  for (var i = 0; i < logs.length; i++) {
+    var log = logs[i];
+    var d = new Date(log.ts);
+    text += '[' + d.toISOString() + '] [' + (log.lv || 'info').toUpperCase() + '] ' + log.msg;
+    if (log.exp) text += '\n  → ' + log.exp;
+    text += '\n\n';
+  }
+  text += '--- 앱 버전: ' + (hasNativeBridge && AndroidBridge.getAppVersion
+    ? AndroidBridge.getAppVersion() : '웹') + ' ---\n';
+
+  // 클립보드 복사
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.cssText = 'position:fixed;top:-999px;left:-999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try { document.execCommand('copy'); showToast('로그가 클립보드에 복사됐습니다'); }
+  catch(e) { showToast('복사 실패'); }
+  document.body.removeChild(textarea);
+}
+
+function clearLogs() {
+  if (confirm('저장된 로그를 모두 삭제하시겠습니까?')) {
+    SympotalkLog.clear();
+    SympotalkLog.push('info', '로그 초기화됨', '이전 로그가 삭제됐습니다.');
+    renderLogUI();
+    showToast('로그가 삭제됐습니다');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    APP UPDATE (APK 자동 업데이트 - Native Bridge 연동)
 ═══════════════════════════════════════════════════════ */
 var pendingApkUrl = null;
@@ -2369,6 +2560,13 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
   btnEl.disabled = false;
 
   updateLastCheckTimestamp();
+  SympotalkLog.push(
+    status === 'available' ? 'info' : (status === 'uptodate' ? 'success' : 'warn'),
+    '업데이트 체크: ' + status + (latestVersion ? ' v' + latestVersion : ''),
+    status === 'available' ? '새 APK 버전이 있습니다. "지금 업데이트" 로 설치하세요.'
+      : status === 'uptodate' ? '최신 버전을 사용 중입니다.'
+      : '업데이트 확인 중 문제가 발생했습니다.'
+  );
   if (status === 'available') {
     latestEl.textContent = 'v' + latestVersion;
     latestEl.style.color = '#22c55e';
@@ -2662,9 +2860,10 @@ function registerServiceWorker() {
    INIT
 ═══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function() {
+  SympotalkLog.push('info', '앱 시작', '런처가 정상적으로 실행됐습니다.');
   registerServiceWorker();
   loadEvents();
-  startSWKeepalive();   // Service Worker only (Supabase 핑 제거)
+  startSWKeepalive();
   // 행사 목록 자동 갱신 제거 (v1.0.31+) — 사용자가 새로고침 버튼으로만 갱신
 
   // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
