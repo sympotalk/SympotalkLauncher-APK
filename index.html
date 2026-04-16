@@ -415,31 +415,7 @@
     #qr-video::-webkit-media-controls-start-playback-button { display: none !important; }
     #qr-video::-webkit-media-controls { display: none !important; }
     #qr-canvas { display: none; }
-    .scan-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-    .scan-frame {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 60%; height: 60%;
-      border: 3px solid rgba(96,165,250,0.8);
-      border-radius: 8px;
-      box-shadow: 0 0 0 2000px rgba(0,0,0,0.5);
-    }
-    .scan-line {
-      position: absolute;
-      left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, #60a5fa, transparent);
-      animation: scanline 2s ease-in-out infinite;
-    }
-    @keyframes scanline {
-      0%   { top: 20%; }
-      100% { top: 80%; }
-    }
+    /* scan-overlay/frame/line 제거 — 카메라 영상에 간섭하는 프레임/스캔라인 삭제 */
     #scan-result {
       width: 100%;
       max-width: 500px;
@@ -761,23 +737,10 @@
         <div id="scanner-container" style="display:none">
           <video id="qr-video" playsinline muted webkit-playsinline disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
           <canvas id="qr-canvas"></canvas>
-          <div class="scan-overlay">
-            <div class="scan-frame">
-              <div class="scan-line"></div>
-            </div>
-          </div>
+          <!-- 오버레이(프레임/라인) 제거: 카메라 영상에 간섭하지 않도록 -->
         </div>
 
-        <div class="wifi-scan-btns">
-          <button id="btn-start-scan" class="btn-scan btn-scan-start" onclick="startQRScan()">
-            📷 카메라 시작
-          </button>
-          <button id="btn-stop-scan" class="btn-scan btn-scan-stop" onclick="stopQRScan()" style="display:none">
-            ⏹ 중지
-          </button>
-        </div>
-
-        <div id="scan-status">웹 링크 QR 코드를 카메라에 비춰주세요</div>
+        <div id="scan-status" style="margin-top:8px">웹 링크 QR 코드를 카메라에 비춰주세요</div>
 
         <div id="scan-result" style="width:100%;max-width:500px">
           <div id="qr-url-card" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px">
@@ -1473,6 +1436,10 @@ function showView(name) {
     updateCurrentAppVersion();
     loadAppInfo();
   }
+  // QR 탭 진입 시 자동으로 카메라 시작
+  if (name === 'wifi') {
+    setTimeout(startQRScan, 150);   // 뷰 전환 애니메이션 직후
+  }
 }
 
 function handleBack() {
@@ -1830,15 +1797,26 @@ function startQRScan() {
     return;
   }
 
-  document.getElementById('scan-status').textContent = '카메라 권한 요청 중...';
-  document.getElementById('btn-start-scan').style.display = 'none';
-  document.getElementById('btn-stop-scan').style.display = 'flex';
+  // 이미 실행 중이면 중복 호출 방지
+  if (state.scannerStream) return;
 
+  document.getElementById('scan-status').textContent = '카메라 권한 요청 중...';
+  var stopBtn = document.getElementById('btn-stop-scan');
+  if (stopBtn) stopBtn.style.display = 'flex';
+
+  // 해상도 상향: 1920x1080 우선, 실패 시 1280x720 자동 폴백
+  // advanced constraints: 연속 포커스 + 높은 노출 샘플링
   var constraints = {
     video: {
-      facingMode: 'environment',
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      frameRate: { ideal: 30, min: 15 },
+      // 기기가 지원하면 연속 autofocus + 근거리 모드
+      advanced: [
+        { focusMode: 'continuous' },
+        { focusDistance: { ideal: 0.1 } }  // 10cm 근거리 우선 (QR 근접 스캔)
+      ]
     }
   };
 
@@ -1847,29 +1825,51 @@ function startQRScan() {
     var video = document.getElementById('qr-video');
     var container = document.getElementById('scanner-container');
     container.style.display = 'block';
-    video.classList.remove('ready');   // 준비 전까지 숨김
+    video.classList.remove('ready');
     video.srcObject = stream;
-    // 비디오 메타데이터가 로드된 뒤에만 가시화 → 플레이 아이콘 깜빡임 방지
     video.onloadedmetadata = function() {
       video.play().then(function() {
         video.classList.add('ready');
         requestAnimationFrame(scanQRFrame);
       }).catch(function() {
-        // 자동 재생 정책으로 실패해도 일단 보여주고 스캔 시도
         video.classList.add('ready');
         requestAnimationFrame(scanQRFrame);
       });
     };
     document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
   }).catch(function(err) {
-    document.getElementById('btn-start-scan').style.display = 'flex';
-    document.getElementById('btn-stop-scan').style.display = 'none';
+    // advanced constraint 실패 시 기본 제약으로 재시도
+    if (err.name === 'OverconstrainedError') {
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      }).then(function(stream) {
+        state.scannerStream = stream;
+        var video = document.getElementById('qr-video');
+        document.getElementById('scanner-container').style.display = 'block';
+        video.srcObject = stream;
+        video.onloadedmetadata = function() {
+          video.play().catch(function(){});
+          video.classList.add('ready');
+          requestAnimationFrame(scanQRFrame);
+        };
+        document.getElementById('scan-status').textContent = 'QR 코드를 비춰주세요';
+      }).catch(showCameraError);
+      return;
+    }
+    showCameraError(err);
+  });
+
+  function showCameraError(err) {
+    if (stopBtn) stopBtn.style.display = 'none';
     var msg = err.name === 'NotAllowedError'
-      ? '카메라 권한이 거부되었습니다.<br>브라우저 설정에서 카메라 권한을 허용해주세요.'
+      ? '카메라 권한이 거부되었습니다.<br>설정 → 권한에서 카메라 허용해주세요.'
       : '카메라를 열 수 없습니다: ' + err.message;
     document.getElementById('scan-status').innerHTML = '<div class="camera-denied">' + msg + '</div>';
-  });
+  }
 }
+
+// 프레임 성능 튜닝: 매 프레임이 아니라 2프레임마다 디코딩 (약 15fps) → CPU 절약
+var scanFrameCounter = 0;
 
 function scanQRFrame() {
   if (!state.scannerStream) return;
@@ -1878,19 +1878,31 @@ function scanQRFrame() {
   var canvas = document.getElementById('qr-canvas');
 
   if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // 2 프레임마다 디코딩 (너무 잦은 인식 시도는 CPU 부담 + 결과 동일)
+    if ((scanFrameCounter++ % 2) === 0) {
+      var vw = video.videoWidth, vh = video.videoHeight;
 
-    if (typeof jsQR !== 'undefined') {
-      var code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert'
-      });
-      if (code) {
-        handleQRResult(code.data);
-        return; // 스캔 성공 시 루프 중단
+      // ROI: 화면 중앙 정사각형 (짧은 쪽의 70%) — QR 은 보통 중앙에 비추므로
+      // 전체 대비 인식 속도 2~4배, 주변 간섭 제거
+      var side = Math.floor(Math.min(vw, vh) * 0.7);
+      var sx = Math.floor((vw - side) / 2);
+      var sy = Math.floor((vh - side) / 2);
+
+      canvas.width = side;
+      canvas.height = side;
+      var ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+      var imageData = ctx.getImageData(0, 0, side, side);
+
+      if (typeof jsQR !== 'undefined') {
+        // attemptBoth: 원본 + 반전 양쪽 시도 (어두운 배경 QR 도 인식)
+        var code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth'
+        });
+        if (code && code.data) {
+          handleQRResult(code.data);
+          return;
+        }
       }
     }
   }
@@ -1959,9 +1971,10 @@ function stopQRScan() {
   video.srcObject = null;
   video.classList.remove('ready');
   document.getElementById('scanner-container').style.display = 'none';
-  document.getElementById('btn-start-scan').style.display = 'flex';
-  document.getElementById('btn-stop-scan').style.display = 'none';
+  var stopBtn = document.getElementById('btn-stop-scan');
+  if (stopBtn) stopBtn.style.display = 'none';
   document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
+  scanFrameCounter = 0;
 }
 
 /* ═══════════════════════════════════════════════════════
