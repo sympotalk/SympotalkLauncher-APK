@@ -1,7 +1,7 @@
 /* Service Worker - Sympotalk 행사 런처
  * 역할: 앱 캐싱, 오프라인 지원, 장시간 실행 유지
  */
-const CACHE_NAME = 'sympotalk-launcher-v1';
+const CACHE_NAME = 'sympotalk-launcher-v2';
 const STATIC_ASSETS = [
   '/index.html',
   '/manifest.json'

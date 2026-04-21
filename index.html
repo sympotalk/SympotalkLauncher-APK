@@ -142,10 +142,9 @@
     .nav-btn svg { width: 22px; height: 22px; }
 
     /* ─── Cards & Containers ───────────────────────────── */
+    /* max-width 제거: 1920×1200 LG G Pad 5 등 넓은 태블릿에서 좌우 레터박스 방지 */
     .page-content {
       padding: 16px;
-      max-width: 900px;
-      margin: 0 auto;
     }
     .section-title {
       font-size: 13px;
@@ -1096,6 +1095,15 @@ var SympotalkLog = {
     if (m.indexOf('securityexception') !== -1) {
       return 'Android 보안 정책으로 차단됐습니다. 앱 권한을 확인해주세요.';
     }
+    if (m.indexOf('비정상 종료') !== -1 || m.indexOf('비정상') !== -1) {
+      return '이전에 앱이 비정상적으로 종료됐습니다. 메모리 부족이나 시스템 강제 종료가 원인일 수 있습니다.';
+    }
+    if (m.indexOf('oom') !== -1 || m.indexOf('out of memory') !== -1 || m.indexOf('allocation') !== -1) {
+      return '메모리가 부족하여 문제가 발생했습니다. 다른 앱을 종료하고 다시 시도해주세요.';
+    }
+    if (m.indexOf('freeze') !== -1 && m.indexOf('page') !== -1) {
+      return '시스템이 메모리 확보를 위해 앱을 정지시켰습니다.';
+    }
     return null;  // 모르는 패턴은 설명 없이 원본만 표시
   }
 };
@@ -1109,6 +1117,103 @@ window.addEventListener('unhandledrejection', function(e) {
   var reason = e.reason;
   var msg = reason && reason.message ? reason.message : String(reason);
   SympotalkLog.push('error', 'Promise 실패: ' + msg);
+});
+
+/* ═══════════════════════════════════════════════════════
+   비정상 종료 감지 — 세션 하트비트 + 종료 이벤트 기록
+   ─────────────────────────────────────────────────────
+   원리:
+   1) 앱 시작 시 세션 플래그를 세운다 (timestamp 포함)
+   2) 정상 종료(pagehide/beforeunload) 시 플래그를 내린다
+   3) 다음 시작 시 플래그가 남아 있으면 → 이전 세션이 비정상 종료
+   4) pagehide·freeze·메모리 부족 등 종료 직전 이벤트도 기록
+═══════════════════════════════════════════════════════ */
+var SESSION_KEY = 'sympotalk_session';
+
+/** 이전 세션 비정상 종료 여부 확인 (앱 시작 시 호출) */
+function checkPreviousSession() {
+  try {
+    var prev = localStorage.getItem(SESSION_KEY);
+    if (prev) {
+      var s = JSON.parse(prev);
+      if (s && s.active) {
+        var startedAt = new Date(s.ts).toLocaleString('ko-KR');
+        var lastBeat = s.beat ? new Date(s.beat).toLocaleString('ko-KR') : startedAt;
+        var exitReason = s.lastEvent || '기록 없음';
+        SympotalkLog.push('error',
+          '이전 세션 비정상 종료 감지 — 시작: ' + startedAt + ', 마지막 활동: ' + lastBeat + ', 마지막 이벤트: ' + exitReason,
+          '이전에 앱이 정상 종료되지 않았습니다. 메모리 부족·시스템 강제 종료·크래시 등이 원인일 수 있습니다.'
+        );
+      }
+    }
+  } catch(e) {}
+}
+
+/** 세션 시작 (플래그 세우기) */
+function startSession() {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      active: true,
+      ts: Date.now(),
+      beat: Date.now(),
+      lastEvent: null
+    }));
+  } catch(e) {}
+}
+
+/** 세션 하트비트 갱신 — 마지막 활동 시각 업데이트 */
+function updateSessionBeat(eventName) {
+  try {
+    var raw = localStorage.getItem(SESSION_KEY);
+    if (raw) {
+      var s = JSON.parse(raw);
+      s.beat = Date.now();
+      if (eventName) s.lastEvent = eventName;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    }
+  } catch(e) {}
+}
+
+/** 세션 정상 종료 (플래그 내리기) */
+function endSession() {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ active: false, ts: Date.now() }));
+  } catch(e) {}
+}
+
+// 정상 종료 이벤트 감지
+window.addEventListener('pagehide', function(e) {
+  var reason = e.persisted ? 'pagehide (bfcache)' : 'pagehide (종료)';
+  SympotalkLog.push('info', reason, '앱 화면이 닫혔습니다.');
+  updateSessionBeat(reason);
+  endSession();
+});
+window.addEventListener('beforeunload', function() {
+  updateSessionBeat('beforeunload');
+  endSession();
+});
+
+// 페이지 라이프사이클: freeze (시스템이 메모리 회수 직전에 발생)
+if ('onfreeze' in document) {
+  document.addEventListener('freeze', function() {
+    SympotalkLog.push('warn', 'Page Freeze — 시스템이 앱을 일시 정지',
+      '시스템이 메모리 확보를 위해 앱을 정지시켰습니다. 이후 강제 종료될 수 있습니다.');
+    updateSessionBeat('freeze');
+  });
+  document.addEventListener('resume', function() {
+    SympotalkLog.push('info', 'Page Resume — 일시 정지에서 복귀',
+      '앱이 정지 상태에서 다시 활성화됐습니다.');
+    updateSessionBeat('resume');
+  });
+}
+
+// 가시성 변화 추적 (백그라운드 전환 시 기록)
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') {
+    updateSessionBeat('visibility:hidden');
+  } else {
+    updateSessionBeat('visibility:visible');
+  }
 });
 
 /* ═══════════════════════════════════════════════════════
@@ -2860,6 +2965,8 @@ function registerServiceWorker() {
    INIT
 ═══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function() {
+  checkPreviousSession();   // 이전 세션 비정상 종료 여부 확인
+  startSession();           // 새 세션 플래그 세우기
   SympotalkLog.push('info', '앱 시작', '런처가 정상적으로 실행됐습니다.');
   registerServiceWorker();
   loadEvents();
