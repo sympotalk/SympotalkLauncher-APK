@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Sympotalk Launcher v1.1.0</title>
+<title>Sympotalk Launcher v1.1.1</title>
 <!-- jsQR: QR 디코딩 라이브러리 (보존) -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
@@ -379,6 +379,29 @@ input { font: inherit; }
 
 /* WiFi list */
 .wifi-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.wifi-list.collapsed { display: none; }
+.wifi-collapsed-banner {
+  display: none;
+  align-items: center; gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+}
+.wifi-collapsed-banner.show { display: flex; }
+.wifi-collapsed-banner svg { width: 20px; height: 20px; stroke: var(--accent); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+.wifi-collapsed-banner .info { flex: 1; min-width: 0; }
+.wifi-collapsed-banner .info strong { display: block; font: 600 13px/1.2 sans-serif; color: var(--accent); margin-bottom: 3px; }
+.wifi-collapsed-banner .info small { display: block; font: 500 11px/1.4 sans-serif; color: var(--text-2); }
+.wifi-collapsed-banner button {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  background: transparent; border: 1px solid var(--accent-border);
+  border-radius: 8px; color: var(--accent);
+  font: 600 12px/1 sans-serif; transition: all 0.12s;
+}
+.wifi-collapsed-banner button:hover { background: var(--accent-press); }
+.wifi-collapsed-banner button:active { transform: scale(0.97); box-shadow: var(--accent-glow); }
 .wifi-item {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-4);
@@ -751,7 +774,7 @@ body.keyboard-open .pw-modal { align-items: flex-start; padding-top: 24px; }
     <span class="tb-logo">Sympotalk</span>
     <span class="tb-divider">·</span>
     <span class="tb-title" id="tb-title">행사 런처</span>
-    <span class="tb-version" id="topbar-version" title="현재 설치된 APK 버전">v1.1.0</span>
+    <span class="tb-version" id="topbar-version" title="현재 설치된 APK 버전">v1.1.1</span>
   </header>
 
   <!-- ─────────── Main ─────────── -->
@@ -836,6 +859,14 @@ body.keyboard-open .pw-modal { align-items: flex-start; padding-top: 24px; }
         <div class="section-label"><span class="name">주변 네트워크</span></div>
         <div id="wifi-scan-status" style="font:500 12px/1.5 sans-serif;color:var(--text-3);margin-bottom:var(--space-3)">새로고침 버튼을 눌러 주변 WiFi 를 검색하세요</div>
         <div class="wifi-list" id="wifi-list"></div>
+        <div class="wifi-collapsed-banner" id="wifi-collapsed-banner">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <div class="info">
+            <strong id="wifi-collapsed-ssid">연결됨</strong>
+            <small>주변 네트워크 목록을 숨겼습니다.</small>
+          </div>
+          <button onclick="expandWifiList()">다시 검색</button>
+        </div>
         <div id="current-wifi" style="margin-top:var(--space-3);font:500 12px/1.4 sans-serif;color:var(--text-3)"></div>
       </div>
 
@@ -952,7 +983,7 @@ body.keyboard-open .pw-modal { align-items: flex-start; padding-top: 24px; }
           <svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7z"/><path d="M2 7l10 5 10-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
         </div>
         <div class="version-info">
-          <div class="version-num" id="settings-version-num">1.1.0<small>installed</small></div>
+          <div class="version-num" id="settings-version-num">1.1.1<small>installed</small></div>
           <div class="version-build" id="settings-version-build">com.sympotalk.launcher</div>
         </div>
         <button class="btn-primary" id="btn-check-app-update" onclick="checkAppUpdate()">
@@ -1483,9 +1514,38 @@ function requestLocationPermission() {
   }
 }
 
+/**
+ * WiFi 리스트 접기 — 연결 성공 후 호출하여 주변 네트워크 노출을 줄임.
+ * 사용자가 다시 보고 싶으면 배너의 "다시 검색" 버튼을 누른다.
+ */
+function collapseWifiList(ssid) {
+  var listEl   = document.getElementById('wifi-list');
+  var bannerEl = document.getElementById('wifi-collapsed-banner');
+  var ssidEl   = document.getElementById('wifi-collapsed-ssid');
+  if (listEl)   listEl.classList.add('collapsed');
+  if (bannerEl) bannerEl.classList.add('show');
+  if (ssidEl) {
+    ssidEl.textContent = ssid ? ('연결됨 · ' + ssid) : '연결됨';
+  }
+}
+
+function expandWifiList() {
+  var listEl   = document.getElementById('wifi-list');
+  var bannerEl = document.getElementById('wifi-collapsed-banner');
+  if (listEl)   listEl.classList.remove('collapsed');
+  if (bannerEl) bannerEl.classList.remove('show');
+  // 새로고침해서 최신 목록을 보여준다
+  refreshWifiList();
+}
+
 function refreshWifiList() {
   var statusEl = document.getElementById('wifi-scan-status');
   var listEl = document.getElementById('wifi-list');
+
+  // 명시적 새로고침이므로 접힘 상태 해제
+  if (listEl) listEl.classList.remove('collapsed');
+  var bannerEl = document.getElementById('wifi-collapsed-banner');
+  if (bannerEl) bannerEl.classList.remove('show');
 
   if (!hasNativeBridge) {
     statusEl.textContent = '웹 브라우저에서는 WiFi 스캔 불가 — APK 설치 필요';
@@ -1617,12 +1677,14 @@ window.onWifiConnectResult = function(success, msg) {
   if (success && code === 'WIFI_SUGGEST_OK') {
     if (statusEl) statusEl.innerHTML = escHtml(ssid) + ' 제안됨 — 상단 알림바의 [연결] 을 탭하세요';
     showToast('WiFi 제안됨 — 알림 확인');
+    collapseWifiList(ssid || '');
     setTimeout(updateCurrentWifi, 15000);
     setTimeout(updateCurrentWifi, 30000);
     return;
   }
   if (success && code === 'WIFI_SUGGEST_DUPE') {
     if (statusEl) statusEl.innerHTML = escHtml(ssid) + ' 는 이미 등록돼 있습니다 — 범위 안에 있으면 자동 연결';
+    collapseWifiList(ssid || '');
     setTimeout(updateCurrentWifi, 3000);
     setTimeout(updateCurrentWifi, 10000);
     return;
@@ -1630,9 +1692,9 @@ window.onWifiConnectResult = function(success, msg) {
   if (success) {
     showToast(msg || 'WiFi 연결 시도 중');
     if (statusEl) statusEl.textContent = msg || '연결됨';
+    collapseWifiList(ssid || '');
     setTimeout(updateCurrentWifi, 2000);
     setTimeout(updateCurrentWifi, 5000);
-    setTimeout(refreshWifiList, 6000);
     return;
   }
 
@@ -2408,7 +2470,7 @@ function runNetworkDiagnostic() {
   var resultEl = document.getElementById('net-diag-result');
   var btnEl = document.getElementById('btn-net-diag');
   btnEl.disabled = true;
-  resultEl.innerHTML = '테스트 중...';
+  resultEl.innerHTML = '테스트 중... (각 endpoint 3회 평균)';
 
   var targets = [
     { name: 'Proxy /api/events', url: PROXY_URL + '/api/events' },
@@ -2417,19 +2479,42 @@ function runNetworkDiagnostic() {
     { name: 'GitHub API',        url: 'https://api.github.com' }
   ];
 
-  var results = [];
+  // v1.1.1: 1회 측정 → 3회 평균. 약 3배 시간이지만 의미 있는 수치.
+  var ROUNDS = 3;
+  var stats = []; // per-target: { name, samples: [{ok, time}], failures }
+  for (var i0 = 0; i0 < targets.length; i0++) {
+    stats[i0] = { name: targets[i0].name, samples: [], failures: 0 };
+  }
   var completed = 0;
+  var totalCalls = targets.length * ROUNDS;
 
-  function render() {
+  function render(done) {
     var html = '';
-    for (var i = 0; i < results.length; i++) {
-      var r = results[i];
-      var color = r.ok ? 'var(--accent)' : 'var(--danger)';
-      var label = r.ok ? (r.time + 'ms') : escHtml(r.error || '실패');
-      html += '<div><strong style="color:' + color + '">' + r.name + '</strong>: ' + label + '</div>';
+    for (var i = 0; i < stats.length; i++) {
+      var s = stats[i];
+      var oks = s.samples.filter(function(x){ return x.ok; });
+      if (oks.length === 0 && s.failures === 0) {
+        html += '<div><strong style="color:var(--text-3)">' + s.name + '</strong>: 대기...</div>';
+        continue;
+      }
+      if (oks.length === 0) {
+        html += '<div><strong style="color:var(--danger)">' + s.name + '</strong>: 전부 실패 (' + s.failures + '회)</div>';
+        continue;
+      }
+      var sum = 0, mn = Infinity, mx = -Infinity;
+      for (var k = 0; k < oks.length; k++) {
+        sum += oks[k].time;
+        if (oks[k].time < mn) mn = oks[k].time;
+        if (oks[k].time > mx) mx = oks[k].time;
+      }
+      var avg = (sum / oks.length).toFixed(0);
+      var color = (s.failures > 0) ? 'var(--warning)' : 'var(--accent)';
+      var detail = oks.length + '/' + ROUNDS + ' 성공, 평균 ' + avg + 'ms';
+      if (oks.length >= 2) detail += ' (min ' + mn + ' / max ' + mx + ')';
+      html += '<div><strong style="color:' + color + '">' + s.name + '</strong>: ' + detail + '</div>';
     }
-    if (completed === targets.length) {
-      var allOk = results.every(function(r){ return r.ok; });
+    if (done) {
+      var allOk = stats.every(function(s){ return s.failures === 0 && s.samples.length === ROUNDS; });
       html += '<div style="margin-top:8px;padding:8px;border-radius:6px;background:' +
         (allOk ? 'var(--accent-fill)' : 'rgba(255,184,0,0.1)') +
         ';color:' + (allOk ? 'var(--accent)' : 'var(--warning)') + '">' +
@@ -2440,21 +2525,31 @@ function runNetworkDiagnostic() {
     resultEl.innerHTML = html;
   }
 
-  targets.forEach(function(t, idx) {
+  function callOnce(idx, round) {
+    var t = targets[idx];
     var start = Date.now();
     fetch(t.url, { method: 'GET', cache: 'no-store', mode: 'cors' })
       .then(function() {
-        results[idx] = { name: t.name, ok: true, time: Date.now() - start };
+        stats[idx].samples.push({ ok: true, time: Date.now() - start });
       })
-      .catch(function(err) {
-        results[idx] = { name: t.name, ok: false, error: err.message || '연결 실패' };
+      .catch(function() {
+        stats[idx].failures++;
       })
       .finally(function() {
         completed++;
-        render();
-        if (completed === targets.length) btnEl.disabled = false;
+        render(completed === totalCalls);
+        if (completed === totalCalls) btnEl.disabled = false;
       });
-  });
+  }
+
+  // 각 target 을 ROUNDS 만큼 순차 측정 (라운드 간 200ms 간격)
+  for (var r = 0; r < ROUNDS; r++) {
+    (function(round) {
+      setTimeout(function() {
+        for (var i = 0; i < targets.length; i++) callOnce(i, round);
+      }, round * 200);
+    })(r);
+  }
 }
 
 function runPingTest() {
@@ -2478,7 +2573,8 @@ function runPingTest() {
 
   resultEl.innerHTML = '측정 중...';
 
-  var samples = 5;
+  // 측정 신뢰도를 위해 v1.1.1에서 5→15 sample, ~1s→~6s 로 연장
+  var samples = 15;
   var results = [];
   var fails = 0;
   var i = 0;
@@ -2492,7 +2588,7 @@ function runPingTest() {
       else fails++;
       i++;
       resultEl.innerHTML = '측정 중... ' + i + '/' + samples;
-      setTimeout(tick, 150);
+      setTimeout(tick, 350);
     }, 50);
   }
 
@@ -2502,9 +2598,29 @@ function runPingTest() {
       resultEl.innerHTML = '<small style="color:var(--danger)">전부 실패</small>';
       return;
     }
-    var avg = results.reduce(function(a,b){return a+b;}, 0) / results.length;
-    resultEl.innerHTML = avg.toFixed(0) + '<small>ms</small>';
-    if (avg >= 50) resultEl.classList.add('warn');
+    // 평균 + min/max + jitter (표준편차 근사)
+    var sum = 0, min = Infinity, max = -Infinity;
+    for (var k = 0; k < results.length; k++) {
+      var v = results[k];
+      sum += v;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    var avg = sum / results.length;
+    var sqSum = 0;
+    for (var j = 0; j < results.length; j++) {
+      var d = results[j] - avg;
+      sqSum += d * d;
+    }
+    var jitter = Math.sqrt(sqSum / results.length);
+    var lossPct = (fails / samples) * 100;
+    var summary = avg.toFixed(0) + '<small>ms</small>';
+    var detail = '<div style="font:500 11px/1.4 sans-serif;color:var(--text-3);margin-top:4px">' +
+      'min ' + min + ' / max ' + max + ' / jitter ' + jitter.toFixed(1) + ' ms' +
+      (fails > 0 ? ' / loss ' + lossPct.toFixed(0) + '%' : '') +
+      ' (' + results.length + '/' + samples + ')</div>';
+    resultEl.innerHTML = summary + detail;
+    if (avg >= 50 || jitter >= 30 || lossPct >= 20) resultEl.classList.add('warn');
     else resultEl.classList.remove('warn');
   }
 
@@ -2517,7 +2633,9 @@ function runSpeedTest() {
   btn.disabled = true;
   resultEl.innerHTML = '연결 중...';
 
-  var sizeBytes = 5 * 1000 * 1000;
+  // v1.1.1: 5MB → 25MB 로 확대 (저속 회선에서도 stable Mbps 측정 가능),
+  //         타임아웃 30s → 60s.
+  var sizeBytes = 25 * 1000 * 1000;
   var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes + '&_=' + Date.now();
 
   var start = 0;
@@ -2526,7 +2644,7 @@ function runSpeedTest() {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.responseType = 'arraybuffer';
-  xhr.timeout = 30000;
+  xhr.timeout = 60000;
 
   xhr.onloadstart = function() {
     start = performance.now();
@@ -3068,7 +3186,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tbVer.textContent = 'v' + v;
         var sv = document.getElementById('settings-version-num');
         if (sv) sv.innerHTML = escHtml(v) + '<small>installed</small>';
-      } catch(e) { tbVer.textContent = 'v1.1.0'; }
+      } catch(e) { tbVer.textContent = 'v1.1.1'; }
     } else {
       tbVer.textContent = 'web';
     }

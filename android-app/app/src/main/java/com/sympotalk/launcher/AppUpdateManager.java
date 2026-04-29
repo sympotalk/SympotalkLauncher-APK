@@ -5,10 +5,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 import androidx.core.content.FileProvider;
 
@@ -32,6 +37,12 @@ public class AppUpdateManager {
     private static final String TAG = "AppUpdateManager";
     private static final String API_BASE = "https://api.github.com/repos/";
     private static final int TIMEOUT = 8000;
+
+    // v1.1.1: rate-limit 캐시 폴백 — 마지막 성공 응답을 60분간 신뢰값으로 사용
+    private static final String PREF_NAME = "app_update_cache";
+    private static final String PREF_LAST_RESPONSE = "last_release_json";
+    private static final String PREF_LAST_FETCH_MS = "last_fetch_ms";
+    private static final long CACHE_TTL_MS = 60L * 60L * 1000L; // 60분
 
     public interface CheckCallback {
         void onUpdateAvailable(String latestVersion, String apkUrl, String releaseNotes);
@@ -62,12 +73,22 @@ public class AppUpdateManager {
         return BuildConfig.VERSION_NAME;
     }
 
-    /** GitHub Releases API 에서 최신 버전 확인 */
+    /**
+     * GitHub Releases API 에서 최신 버전 확인.
+     * v1.1.1: rate-limit (HTTP 403) 우아한 처리 + 마지막 성공 응답 60분 캐시 폴백.
+     *
+     * 403 시나리오:
+     *  - GitHub Unauthenticated API: 60 req/h per IP. 행사장 NAT 다중 태블릿이면
+     *    빠르게 소진. 1시간 슬라이딩 윈도우라 reset 시각만 알리면 사용자가 기다리면 됨.
+     *  - 응답 헤더 X-RateLimit-Reset (unix timestamp) 파싱해서 사용자에게 표시.
+     *  - 캐시된 응답이 60분 이내면 그것으로 폴백 (정보 표시 OK, 다운로드 URL 도 유효).
+     */
     public void checkForUpdate(final CheckCallback callback) {
         new Thread(() -> {
+            HttpURLConnection conn = null;
             try {
                 URL url = new URL(API_BASE + repo + "/releases/latest");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(TIMEOUT);
                 conn.setReadTimeout(TIMEOUT);
                 conn.setRequestProperty("Accept", "application/vnd.github+json");
@@ -75,8 +96,27 @@ public class AppUpdateManager {
                 conn.connect();
 
                 int code = conn.getResponseCode();
+                if (code == 403 || code == 429) {
+                    // Rate limit → reset 시각 안내 + 캐시 폴백 시도
+                    String resetHeader = conn.getHeaderField("X-RateLimit-Reset");
+                    String remainHeader = conn.getHeaderField("X-RateLimit-Remaining");
+                    Log.w(TAG, "GitHub API rate limit (HTTP " + code +
+                        "), reset=" + resetHeader + ", remaining=" + remainHeader);
+
+                    String resetMsg = formatRateLimitReset(resetHeader);
+                    boolean usedCache = tryCachedResponse(callback, " (캐시) — GitHub API 한도 초과, " + resetMsg + " 이후 자동 재시도 가능");
+                    if (!usedCache) {
+                        callback.onCheckFailed(
+                            "GitHub API 요청 한도 초과 (HTTP " + code + ") — " + resetMsg + " 이후 자동 재시도 가능"
+                        );
+                    }
+                    return;
+                }
                 if (code != 200) {
-                    callback.onCheckFailed("GitHub API HTTP " + code);
+                    boolean usedCache = tryCachedResponse(callback, " (캐시) — GitHub API HTTP " + code);
+                    if (!usedCache) {
+                        callback.onCheckFailed("GitHub API HTTP " + code);
+                    }
                     return;
                 }
 
@@ -86,41 +126,107 @@ public class AppUpdateManager {
                 while ((line = reader.readLine()) != null) sb.append(line);
                 reader.close();
                 conn.disconnect();
+                conn = null;
 
-                JSONObject json = new JSONObject(sb.toString());
-                String tagName = json.optString("tag_name", "");        // e.g. "v1.0.11"
-                String latestVersion = tagName.startsWith("v") ? tagName.substring(1) : tagName;
-                String releaseNotes = json.optString("body", "");
+                String body = sb.toString();
+                // 성공 응답 캐시 (다음 rate-limit 시 폴백용)
+                saveCachedResponse(body);
 
-                // SympotalkLauncher.apk 고정 파일명 자산 찾기
-                JSONArray assets = json.optJSONArray("assets");
-                String apkUrl = null;
-                if (assets != null) {
-                    for (int i = 0; i < assets.length(); i++) {
-                        JSONObject asset = assets.getJSONObject(i);
-                        String name = asset.optString("name", "");
-                        if ("SympotalkLauncher.apk".equals(name)) {
-                            apkUrl = asset.optString("browser_download_url");
-                            break;
-                        }
-                    }
-                }
+                handleParsedResponse(body, "", callback);
 
-                if (apkUrl == null || apkUrl.isEmpty()) {
-                    callback.onCheckFailed("APK 파일을 찾을 수 없습니다");
-                    return;
-                }
-
-                if (isNewerVersion(latestVersion, getCurrentVersion())) {
-                    callback.onUpdateAvailable(latestVersion, apkUrl, releaseNotes);
-                } else {
-                    callback.onUpToDate(getCurrentVersion());
-                }
             } catch (Exception e) {
                 Log.w(TAG, "업데이트 확인 실패: " + e.getMessage());
-                callback.onCheckFailed(e.getClass().getSimpleName() + ": " + e.getMessage());
+                // 네트워크 에러 시에도 캐시 폴백 시도 (앱이 오프라인 출발 후 캐시 있을 때 유용)
+                boolean usedCache = tryCachedResponse(callback, " (캐시) — 네트워크 오류: " + e.getMessage());
+                if (!usedCache) {
+                    callback.onCheckFailed(e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+            } finally {
+                if (conn != null) {
+                    try { conn.disconnect(); } catch (Exception ignored) {}
+                }
             }
         }).start();
+    }
+
+    /** GitHub API 캐시 폴백: 60분 이내 캐시가 있으면 그것으로 응답을 만든다. */
+    private boolean tryCachedResponse(CheckCallback callback, String suffix) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            String cached = prefs.getString(PREF_LAST_RESPONSE, null);
+            long fetchedAt = prefs.getLong(PREF_LAST_FETCH_MS, 0L);
+            if (cached == null || cached.isEmpty()) return false;
+            long age = System.currentTimeMillis() - fetchedAt;
+            if (age > CACHE_TTL_MS) return false;
+            handleParsedResponse(cached, suffix, callback);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "캐시 폴백 실패: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void saveCachedResponse(String body) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                .putString(PREF_LAST_RESPONSE, body)
+                .putLong(PREF_LAST_FETCH_MS, System.currentTimeMillis())
+                .apply();
+        } catch (Exception ignored) {}
+    }
+
+    private void handleParsedResponse(String body, String suffix, CheckCallback callback) {
+        try {
+            JSONObject json = new JSONObject(body);
+            String tagName = json.optString("tag_name", "");
+            String latestVersion = tagName.startsWith("v") ? tagName.substring(1) : tagName;
+            String releaseNotes = json.optString("body", "");
+            if (suffix != null && !suffix.isEmpty()) {
+                releaseNotes = (releaseNotes == null ? "" : releaseNotes) + "\n\n" + suffix.trim();
+            }
+
+            JSONArray assets = json.optJSONArray("assets");
+            String apkUrl = null;
+            if (assets != null) {
+                for (int i = 0; i < assets.length(); i++) {
+                    JSONObject asset = assets.getJSONObject(i);
+                    String name = asset.optString("name", "");
+                    if ("SympotalkLauncher.apk".equals(name)) {
+                        apkUrl = asset.optString("browser_download_url");
+                        break;
+                    }
+                }
+            }
+
+            if (apkUrl == null || apkUrl.isEmpty()) {
+                callback.onCheckFailed("APK 파일을 찾을 수 없습니다");
+                return;
+            }
+
+            if (isNewerVersion(latestVersion, getCurrentVersion())) {
+                callback.onUpdateAvailable(latestVersion, apkUrl, releaseNotes);
+            } else {
+                callback.onUpToDate(getCurrentVersion());
+            }
+        } catch (Exception e) {
+            callback.onCheckFailed("응답 파싱 실패: " + e.getMessage());
+        }
+    }
+
+    /** X-RateLimit-Reset (unix timestamp) → "HH:mm" 형식 문자열. */
+    private String formatRateLimitReset(String resetHeader) {
+        if (resetHeader == null || resetHeader.isEmpty()) return "잠시 후";
+        try {
+            long resetSec = Long.parseLong(resetHeader);
+            long resetMs = resetSec * 1000L;
+            long now = System.currentTimeMillis();
+            long deltaMin = Math.max(0, (resetMs - now) / 60000L);
+            SimpleDateFormat fmt = new SimpleDateFormat("HH:mm", Locale.KOREA);
+            return fmt.format(new Date(resetMs)) + " (약 " + deltaMin + "분 후)";
+        } catch (Exception e) {
+            return "잠시 후";
+        }
     }
 
     /** DownloadManager 로 APK 다운로드 + 진행상황 콜백 */
