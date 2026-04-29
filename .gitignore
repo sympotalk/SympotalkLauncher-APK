@@ -1,5 +1,18 @@
-# Claude Code 내부 설정 (커밋 제외)
-.claude/
+# Claude Code 내부 설정
+# settings.json / commands/ 는 팀 공유 (커밋 대상)
+# 아래 항목들만 개인/런타임 (커밋 제외)
+.claude/settings.local.json
+.claude/session.log
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# 환경 변수 / 시크릿 (.env.example 만 예외 허용)
+.env
+.env.*
+!.env.example
+
+# 배포 로그 중 시크릿 포함 가능성 있는 파일
+docs/deployments/*-secrets.md
 
 # 중복 www/ 폴더 (루트 파일이 단일 소스)
 /www/

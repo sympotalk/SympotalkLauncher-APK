@@ -1,0 +1,130 @@
+name: CI Checks
+
+# PR 및 비-main 브랜치 push에서만 실행 (main 푸시는 build-and-deploy.yml이 처리).
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches-ignore: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate (versions, syntax, security)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # version.txt와 build.gradle versionName 일치 — main의 build-and-deploy와 동일 게이트
+      - name: Verify version consistency
+        run: |
+          VERSION_TXT=$(cat version.txt | tr -d '[:space:]')
+          VERSION_GRADLE=$(grep -oE 'versionName "([^"]+)"' android-app/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+          echo "version.txt  = $VERSION_TXT"
+          echo "build.gradle = $VERSION_GRADLE"
+          if [ "$VERSION_TXT" != "$VERSION_GRADLE" ]; then
+            echo "::error::version.txt ($VERSION_TXT) ↔ build.gradle versionName ($VERSION_GRADLE) 불일치!"
+            exit 1
+          fi
+
+      # ES2020+ 문법 사용 검사 (Android 9 / Chrome ~71 호환성)
+      # ?. ?? ?.( 등 Chrome 71에서 파싱 실패하는 문법 차단
+      - name: Check ES2020+ syntax in index.html
+        run: |
+          if grep -nE '\?\.\w|\?\?[^=]|\?\?=|\|\|=|\.\.\.[a-zA-Z_$]+\s*\?\?' index.html; then
+            echo "::error::index.html에 Chrome 71 미지원 ES2020+ 문법이 있습니다."
+            echo "::error::?. (optional chaining), ?? (nullish coalescing), ??=, ||= 사용 금지."
+            exit 1
+          else
+            echo "::notice::ES2020+ 문법 사용 없음 — Android 9 호환."
+          fi
+
+      # HTML 기본 sanity (균형 잡힌 태그, manifest 유효성)
+      - name: Validate manifest.json
+        run: |
+          if ! python3 -c "import json; json.load(open('manifest.json'))"; then
+            echo "::error::manifest.json이 유효한 JSON이 아닙니다."
+            exit 1
+          fi
+          echo "::notice::manifest.json 유효."
+
+      # _headers Cloudflare 문법 sanity (행 시작 슬래시 또는 헤더 형식)
+      - name: Validate _headers
+        run: |
+          if [ -f _headers ]; then
+            python3 - <<'PY'
+          import re, sys
+          with open('_headers') as f:
+              for i, line in enumerate(f, 1):
+                  s = line.rstrip('\n')
+                  if not s.strip() or s.lstrip().startswith('#'):
+                      continue
+                  # path lines start with / or *
+                  if s.startswith('/') or s.startswith('*'):
+                      continue
+                  # header lines start with whitespace + Name: value
+                  if re.match(r'^\s+[A-Za-z][A-Za-z0-9-]*:\s*.+$', s):
+                      continue
+                  print(f"::error::_headers line {i} invalid: {s}")
+                  sys.exit(1)
+          print("::notice::_headers OK")
+          PY
+          fi
+
+      # release.keystore 등 시크릿 파일이 PR diff에 포함됐는지 검사
+      - name: Check secrets not in diff
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD --name-only)
+          BAD=""
+          for f in $DIFF; do
+            case "$f" in
+              .env|.env.*|secrets/*|*.jks|local.properties)
+                BAD="$BAD $f" ;;
+              *.keystore)
+                # 의도된 release.keystore는 허용
+                if [ "$f" != "android-app/release.keystore" ]; then BAD="$BAD $f"; fi ;;
+            esac
+          done
+          if [ -n "$BAD" ]; then
+            echo "::error::시크릿/credential 파일이 PR에 포함됨:$BAD"
+            exit 1
+          fi
+          echo "::notice::시크릿 파일 노출 없음."
+
+  android-build:
+    name: Android APK build (sanity, no release)
+    runs-on: ubuntu-latest
+    # validate 통과 후만
+    needs: validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle 8.6
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+          cache-read-only: true
+
+      - name: Copy web assets
+        run: |
+          ASSETS="android-app/app/src/main/assets/www"
+          mkdir -p "$ASSETS"
+          cp index.html manifest.json sw.js version.txt "$ASSETS/"
+
+      - name: Assemble debug APK (no upload)
+        run: gradle assembleDebug --no-daemon --project-dir android-app
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"

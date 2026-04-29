@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sympotalk Launcher — Redesign Preview v1.1.0</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   DESIGN TOKENS — Black + Neon Green (#00FF00)
+═══════════════════════════════════════════════════════ */
+:root {
+  --bg-deep:      #000000;
+  --bg-surface:   #0A0A0A;
+  --bg-elevated:  #141414;
+  --bg-press:     #1A1A1A;
+
+  --border-soft:  #1A1A1A;
+  --border-base:  #262626;
+  --border-hover: #3A3A3A;
+
+  --text-1:       #FAFAFA;
+  --text-2:       #A3A3A3;
+  --text-3:       #6B6B6B;
+  --text-disabled:#404040;
+
+  --accent:       #00FF00;
+  --accent-soft:  #7CFFB2;
+  --accent-fill:  rgba(0,255,0,0.10);
+  --accent-border:rgba(0,255,0,0.40);
+  --accent-press: rgba(0,255,0,0.20);
+  --accent-glow:  0 0 16px rgba(0,255,0,0.45);
+
+  --warning:      #FFB800;
+  --danger:       #FF3838;
+
+  --radius-sm:  8px;
+  --radius:     12px;
+  --radius-lg:  16px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    20px;
+  --space-6:    24px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-1);
+  font-family: -apple-system, "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+
+#app {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════════════════════ */
+#topbar {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+.tb-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: var(--accent-glow);
+  animation: pulse 1.6s ease-out infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0,255,0,0.6); }
+  70%  { box-shadow: 0 0 0 8px rgba(0,255,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,255,0,0); }
+}
+.tb-logo { font: 700 17px/1 sans-serif; letter-spacing: -0.3px; color: var(--text-1); }
+.tb-divider { color: var(--text-3); font-size: 14px; }
+.tb-title { font: 500 14px/1 sans-serif; color: var(--text-2); flex: 1; }
+.tb-version { font: 500 11px/1 sans-serif; color: var(--text-3); }
+
+/* ═══════════════════════════════════════════════════════
+   MAIN
+═══════════════════════════════════════════════════════ */
+#main {
+  flex: 1; overflow: hidden; position: relative;
+}
+.view {
+  position: absolute; inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-4);
+  display: none;
+}
+.view.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════
+   PAGE HEADER (segmented control)
+═══════════════════════════════════════════════════════ */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.page-title { font: 700 18px/1 sans-serif; }
+
+.segmented {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  background: transparent; border: 0;
+  padding: 7px 14px; border-radius: 7px;
+  font: 600 13px/1 sans-serif; color: var(--text-2);
+  transition: background 0.15s, color 0.15s;
+}
+.seg-btn.active {
+  background: var(--accent-fill);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.btn-refresh, .btn-line {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  color: var(--text-2);
+  font: 500 12px/1 sans-serif;
+  transition: all 0.15s;
+}
+.btn-refresh svg, .btn-line svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.btn-refresh:active, .btn-line:active, .btn-line:hover { color: var(--accent); border-color: var(--accent-border); }
+
+/* ═══════════════════════════════════════════════════════
+   GENERIC CARD / SECTION
+═══════════════════════════════════════════════════════ */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.section-label {
+  font: 600 11px/1 sans-serif;
+  color: var(--text-3);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 0 0 var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.section-label::before {
+  content: ''; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--text-3);
+}
+.section-label .name { color: var(--text-2); text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+/* ═══════════════════════════════════════════════════════
+   EVENT CARD (HOME view)
+═══════════════════════════════════════════════════════ */
+.event-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.event-card[data-status="ended"] { opacity: 0.55; }
+
+.event-header {
+  display: flex; align-items: center; gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.event-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.event-status-dot[data-status="live"] {
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+  animation: pulse 1.6s ease-out infinite;
+}
+.event-status-dot[data-status="upcoming"] { border: 1.5px solid var(--text-3); }
+.event-status-dot[data-status="ended"]    { background: var(--text-disabled); }
+
+.event-name {
+  flex: 1; font: 700 22px/1.2 sans-serif;
+  letter-spacing: -0.5px; color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.event-time {
+  font: 500 12px/1 sans-serif; color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.event-meta {
+  display: flex; gap: var(--space-4); flex-wrap: wrap;
+  font: 500 13px/1.4 sans-serif; color: var(--text-2);
+  margin-bottom: var(--space-4);
+}
+.event-meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.event-meta-item svg { width: 13px; height: 13px; stroke: var(--text-3); fill: none; stroke-width: 2; }
+
+/* ═══════════════════════════════════════════════════════
+   ACTION ROW — 5버튼 한 줄
+═══════════════════════════════════════════════════════ */
+.action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); }
+.action-row-multi { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.action-row-empty { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-bottom: var(--space-3); }
+
+@media (max-width: 720px) { .action-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 420px) { .action-row { grid-template-columns: repeat(2, 1fr); } }
+
+.action-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font: 500 13px/1 sans-serif;
+  min-height: 92px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.action-btn svg {
+  width: 26px; height: 26px;
+  stroke: currentColor; fill: none; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.action-btn:hover { border-color: var(--border-hover); color: var(--text-1); }
+.action-btn:active {
+  background: var(--accent-press);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 1px var(--accent-border), var(--accent-glow);
+}
+.action-btn[disabled] { opacity: 0.35; pointer-events: none; }
+
+.action-btn-attendee { position: relative; }
+.action-btn-attendee::before {
+  content: '';
+  position: absolute; left: 0; top: 12px; bottom: 12px;
+  width: 2px; background: var(--accent-border); border-radius: 0 2px 2px 0;
+}
+.action-btn-attendee:active::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+.multiroom-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-base);
+  border-radius: var(--radius);
+  color: var(--text-2); font: 500 13px/1 sans-serif;
+  min-height: 92px;
+  transition: all 0.12s;
+}
+.multiroom-btn svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.multiroom-btn .label { font: 600 13px/1 sans-serif; }
+.multiroom-btn .sub { font: 500 11px/1 sans-serif; color: var(--text-3); }
+.multiroom-btn:hover { border-color: var(--border-hover); border-style: solid; color: var(--text-1); }
+.multiroom-btn:active {
+  background: var(--accent-press); border-color: var(--accent-border); border-style: solid;
+  color: var(--accent); transform: scale(0.97);
+  box-shadow: var(--accent-glow);
+}
+
+.empty-rooms {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  font: 500 12px/1.5 sans-serif; color: var(--text-2);
+}
+.empty-rooms svg { width: 16px; height: 16px; stroke: var(--warning); fill: none; stroke-width: 2; flex-shrink: 0; margin-top: 2px; }
+.empty-rooms strong { color: var(--warning); display: block; margin-bottom: 2px; font-weight: 600; font-size: 13px; }
+
+/* ═══════════════════════════════════════════════════════
+   WIFI VIEW
+═══════════════════════════════════════════════════════ */
+.scanner-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.scanner-frame {
+  position: relative;
+  width: 100%; max-width: 520px; aspect-ratio: 4/3;
+  background: #050505;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+/* 카메라 영역 placeholder */
+.scanner-feed {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    repeating-linear-gradient(45deg, #0a0a0a 0 8px, #050505 8px 16px);
+  color: var(--text-3); font: 500 13px/1 sans-serif;
+}
+.scanner-feed svg { width: 32px; height: 32px; stroke: var(--text-3); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
+.scanner-feed > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* 코너 브래킷 */
+.corner {
+  position: absolute; width: 36px; height: 36px;
+  border-color: var(--accent);
+  border-style: solid;
+  filter: drop-shadow(0 0 8px rgba(0,255,0,0.6));
+}
+.corner.tl { top: 14px; left: 14px;    border-width: 2px 0 0 2px; border-radius: 8px 0 0 0; }
+.corner.tr { top: 14px; right: 14px;   border-width: 2px 2px 0 0; border-radius: 0 8px 0 0; }
+.corner.bl { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 8px; }
+.corner.br { bottom: 14px; right: 14px;border-width: 0 2px 2px 0; border-radius: 0 0 8px 0; }
+
+/* 스캔 라인 애니메이션 */
+.scan-line {
+  position: absolute; left: 14px; right: 14px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 12px rgba(0,255,0,0.6);
+  animation: scan 2.4s ease-in-out infinite;
+}
+@keyframes scan {
+  0%, 100% { top: 14px; opacity: 0.3; }
+  50%      { top: calc(100% - 14px); opacity: 1; }
+}
+
+.scanner-hint {
+  font: 500 13px/1.4 sans-serif; color: var(--text-2);
+  text-align: center;
+}
+.scanner-hint .accent { color: var(--accent); font-weight: 600; }
+
+.quick-actions {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+/* WiFi list */
+.wifi-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.wifi-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  transition: all 0.12s;
+}
+.wifi-item:hover { border-color: var(--border-hover); }
+.wifi-item.connected { border-color: var(--accent-border); background: var(--accent-fill); }
+.wifi-icon { width: 22px; height: 22px; stroke: var(--text-2); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+.wifi-item.connected .wifi-icon { stroke: var(--accent); }
+.wifi-info { flex: 1; min-width: 0; }
+.wifi-ssid { font: 600 14px/1.2 sans-serif; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wifi-meta { display: flex; gap: var(--space-3); margin-top: 4px; font: 500 11px/1 sans-serif; color: var(--text-3); }
+.wifi-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+.wifi-meta-item svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+.wifi-action {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  font: 600 12px/1 sans-serif; color: var(--text-2);
+  transition: all 0.12s;
+}
+.wifi-action:hover { border-color: var(--border-hover); color: var(--text-1); }
+.wifi-action:active { border-color: var(--accent-border); color: var(--accent); }
+.wifi-badge-connected {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font: 700 11px/1 sans-serif; color: var(--accent);
+  letter-spacing: 0.4px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+/* Network diagnostic */
+.diag-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.diag-result {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.diag-cell {
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+}
+.diag-label { font: 600 11px/1 sans-serif; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; }
+.diag-value {
+  margin-top: 8px;
+  font: 700 24px/1 sans-serif;
+  color: var(--accent);
+}
+.diag-value small { font: 500 13px/1 sans-serif; color: var(--text-2); margin-left: 4px; }
+.diag-value.warn { color: var(--warning); }
+.diag-value.danger { color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════════
+   SETTINGS VIEW
+═══════════════════════════════════════════════════════ */
+.version-hero {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  display: flex; align-items: center; gap: var(--space-5);
+}
+.version-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.version-icon svg { width: 28px; height: 28px; stroke: var(--accent); fill: none; stroke-width: 1.5; filter: drop-shadow(0 0 6px rgba(0,255,0,0.5)); }
+.version-info { flex: 1; min-width: 0; }
+.version-num { font: 700 28px/1 sans-serif; color: var(--text-1); letter-spacing: -1px; }
+.version-num small { font: 500 13px/1 sans-serif; color: var(--text-3); margin-left: 8px; letter-spacing: 0; }
+.version-build { margin-top: 6px; font: 500 12px/1 sans-serif; color: var(--text-3); }
+
+.btn-primary {
+  padding: 10px 18px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  color: var(--accent);
+  font: 600 13px/1 sans-serif;
+  display: inline-flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+  transition: all 0.12s;
+}
+.btn-primary svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.btn-primary:hover { background: var(--accent-press); }
+.btn-primary:active { transform: scale(0.97); box-shadow: var(--accent-glow); }
+
+/* Info row pairs */
+.info-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.info-row {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+}
+.info-row .label { font: 500 11px/1 sans-serif; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.info-row .value { margin-top: 6px; font: 600 13px/1.3 sans-serif; color: var(--text-1); word-break: break-all; }
+
+/* Log viewer */
+.log-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.log-item {
+  display: grid; grid-template-columns: 8px 60px 1fr;
+  align-items: start; gap: var(--space-3);
+  padding: var(--space-3); border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  font: 500 12px/1.4 sans-serif;
+}
+.log-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+.log-dot.error { background: var(--danger); }
+.log-dot.warn  { background: var(--warning); }
+.log-dot.info  { background: var(--text-3); }
+.log-time { color: var(--text-3); font-size: 11px; padding-top: 2px; }
+.log-msg { color: var(--text-1); }
+.log-msg .exp { display: block; color: var(--text-2); font-size: 11px; margin-top: 3px; line-height: 1.4; }
+
+/* Danger zone */
+.danger-zone {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255,56,56,0.25);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.danger-zone .section-label { color: var(--danger); }
+.danger-zone .section-label::before { background: var(--danger); }
+
+.btn-danger-line {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255,56,56,0.3);
+  border-radius: 8px;
+  color: var(--danger);
+  font: 600 12px/1 sans-serif;
+}
+.btn-danger-line:hover { background: rgba(255,56,56,0.05); border-color: rgba(255,56,56,0.5); }
+
+/* ═══════════════════════════════════════════════════════
+   BOTTOM NAV
+═══════════════════════════════════════════════════════ */
+#bottomnav {
+  flex-shrink: 0;
+  display: flex; height: 64px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-soft);
+}
+.nav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  background: none; border: none;
+  color: var(--text-3);
+  font: 500 11px/1 sans-serif;
+  position: relative;
+  transition: color 0.15s;
+}
+.nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.nav-btn.active { color: var(--accent); }
+.nav-btn.active::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 28px; height: 2px; background: var(--accent); border-radius: 0 0 2px 2px;
+  box-shadow: 0 0 8px rgba(0,255,0,0.6);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODAL
+═══════════════════════════════════════════════════════ */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  padding: var(--space-5);
+  z-index: 100;
+  backdrop-filter: blur(4px);
+}
+.modal-backdrop.show { display: flex; }
+.modal {
+  width: 100%; max-width: 640px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 20px 80px rgba(0,0,0,0.6);
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.modal-title { font: 700 18px/1.2 sans-serif; color: var(--text-1); }
+.modal-title small { display: block; font: 500 12px/1 sans-serif; color: var(--text-3); margin-top: 4px; }
+.modal-close {
+  background: transparent; border: 0; color: var(--text-2);
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { background: var(--bg-press); color: var(--text-1); }
+.modal-close svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+.modal-room { padding: var(--space-3) 0; border-top: 1px solid var(--border-soft); }
+.modal-room:first-of-type { border-top: 0; padding-top: 0; }
+.room-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+@media (max-width: 540px) { .room-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ─────────── Top Bar ─────────── -->
+  <header id="topbar">
+    <span class="tb-dot"></span>
+    <span class="tb-logo">Sympotalk</span>
+    <span class="tb-divider">·</span>
+    <span class="tb-title" id="tb-title">행사 런처</span>
+    <span class="tb-version">v1.1.0</span>
+  </header>
+
+  <!-- ─────────── Main ─────────── -->
+  <div id="main">
+
+    <!-- ════════════════════ HOME VIEW ════════════════════ -->
+    <section class="view active" id="view-home">
+
+      <div class="page-head">
+        <div class="segmented">
+          <button class="seg-btn active" data-tab="ongoing">진행 예정</button>
+          <button class="seg-btn" data-tab="ended">지난 행사</button>
+        </div>
+        <button class="btn-refresh">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          새로고침
+        </button>
+      </div>
+
+      <div data-pane="ongoing">
+
+        <!-- LIVE / single-room (5 buttons) -->
+        <div class="event-card" data-status="live">
+          <div class="event-header">
+            <span class="event-status-dot" data-status="live"></span>
+            <h3 class="event-name">2026 대한피부과학회 춘계학술대회</h3>
+            <span class="event-time">3시간 전</span>
+          </div>
+          <div class="event-meta">
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>04.15 ~ 04.18</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>메디컬코어</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>김매니저</span>
+          </div>
+          <div class="section-label"><span class="name">그랜드볼룸</span></div>
+          <div class="action-row">
+            <button class="action-btn action-btn-attendee">
+              <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+              참석자
+            </button>
+            <button class="action-btn">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              콘솔
+            </button>
+            <button class="action-btn">
+              <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              좌장
+            </button>
+            <button class="action-btn">
+              <svg viewBox="0 0 24 24"><path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+              사회자
+            </button>
+            <button class="action-btn">
+              <svg viewBox="0 0 24 24"><path d="M2 3h20v12H2z"/><path d="M2 15l4 4h12l4-4"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+              질문
+            </button>
+          </div>
+        </div>
+
+        <!-- LIVE / multi-room -->
+        <div class="event-card" data-status="live">
+          <div class="event-header">
+            <span class="event-status-dot" data-status="live"></span>
+            <h3 class="event-name">2026 추계 대규모 학술대회</h3>
+            <span class="event-time">방금 전</span>
+          </div>
+          <div class="event-meta">
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>11.20 ~ 11.22</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>시포스</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>박매니저</span>
+          </div>
+          <div class="action-row-multi">
+            <button class="action-btn action-btn-attendee">
+              <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+              참석자
+            </button>
+            <button class="multiroom-btn" onclick="document.getElementById('m1').classList.add('show')">
+              <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span class="label">룸 선택</span>
+              <span class="sub">3개 룸 — 콘솔 / 좌장 / 사회자 / 질문</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- UPCOMING / no rooms -->
+        <div class="event-card" data-status="upcoming">
+          <div class="event-header">
+            <span class="event-status-dot" data-status="upcoming"></span>
+            <h3 class="event-name">2026 동계 워크샵</h3>
+            <span class="event-time">어제</span>
+          </div>
+          <div class="event-meta">
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>12.05 ~ 12.06</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>메디컬코어</span>
+          </div>
+          <div class="action-row-empty">
+            <button class="action-btn action-btn-attendee">
+              <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+              참석자
+            </button>
+          </div>
+          <div class="empty-rooms">
+            <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div>
+              <strong>룸이 등록되지 않았습니다</strong>
+              sympotalk 관리자에서 룸을 추가하면 콘솔 · 좌장 · 사회자 · 질문 링크가 자동 생성됩니다.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div data-pane="ended" style="display:none">
+        <div class="event-card" data-status="ended">
+          <div class="event-header">
+            <span class="event-status-dot" data-status="ended"></span>
+            <h3 class="event-name">2025 동계학술대회</h3>
+            <span class="event-time">2025.12.10</span>
+          </div>
+          <div class="event-meta">
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/></svg>12.05 ~ 12.07</span>
+            <span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>메디컬코어</span>
+          </div>
+          <div class="section-label"><span class="name">그랜드볼룸 (아카이브)</span></div>
+          <div class="action-row">
+            <button class="action-btn action-btn-attendee"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>참석자</button>
+            <button class="action-btn"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>콘솔</button>
+            <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>좌장</button>
+            <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>사회자</button>
+            <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M2 3h20v12H2z"/><path d="M2 15l4 4h12l4-4"/></svg>질문</button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════ WIFI VIEW ════════════════════ -->
+    <section class="view" id="view-wifi">
+
+      <div class="page-head">
+        <h2 class="page-title">WiFi 네트워크</h2>
+        <button class="btn-line">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          새로고침
+        </button>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="card">
+        <div class="section-label"><span class="name">빠른 동작</span></div>
+        <div class="quick-actions">
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            WiFi 새로고침
+          </button>
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            시스템 설정
+          </button>
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            기본 비밀번호
+          </button>
+        </div>
+      </div>
+
+      <!-- Networks -->
+      <div class="card">
+        <div class="section-label"><span class="name">주변 네트워크</span></div>
+        <div class="wifi-list">
+          <div class="wifi-item connected">
+            <svg class="wifi-icon" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div class="wifi-info">
+              <div class="wifi-ssid">Sympotalk-Event-5G</div>
+              <div class="wifi-meta">
+                <span class="wifi-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>WPA2</span>
+                <span class="wifi-meta-item">192.168.1.42</span>
+                <span class="wifi-meta-item">·85 dBm</span>
+              </div>
+            </div>
+            <span class="wifi-badge-connected">연결됨</span>
+          </div>
+          <div class="wifi-item">
+            <svg class="wifi-icon" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div class="wifi-info">
+              <div class="wifi-ssid">Convention-Hall-Public</div>
+              <div class="wifi-meta">
+                <span class="wifi-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>WPA2</span>
+                <span class="wifi-meta-item">·67 dBm</span>
+              </div>
+            </div>
+            <button class="wifi-action">연결</button>
+          </div>
+          <div class="wifi-item">
+            <svg class="wifi-icon" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div class="wifi-info">
+              <div class="wifi-ssid">Hotel-Guest</div>
+              <div class="wifi-meta">
+                <span class="wifi-meta-item">개방</span>
+                <span class="wifi-meta-item">·54 dBm</span>
+              </div>
+            </div>
+            <button class="wifi-action">연결</button>
+          </div>
+          <div class="wifi-item">
+            <svg class="wifi-icon" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div class="wifi-info">
+              <div class="wifi-ssid">iptime-2.4G</div>
+              <div class="wifi-meta">
+                <span class="wifi-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/></svg>WPA2</span>
+                <span class="wifi-meta-item">·92 dBm (약함)</span>
+              </div>
+            </div>
+            <button class="wifi-action">연결</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network Diagnostic -->
+      <div class="card">
+        <div class="section-label"><span class="name">네트워크 진단</span></div>
+        <div class="diag-grid">
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Ping 테스트
+          </button>
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 2v6m0 0l-3-3m3 3l3-3"/><path d="M2 12h20"/><path d="M12 22v-6m0 0l3 3m-3-3l-3 3"/></svg>
+            Speed Test
+          </button>
+          <button class="action-btn">
+            <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            전체 진단
+          </button>
+        </div>
+        <div class="diag-result">
+          <div class="diag-cell">
+            <div class="diag-label">Latency</div>
+            <div class="diag-value">12<small>ms</small></div>
+          </div>
+          <div class="diag-cell">
+            <div class="diag-label">Download</div>
+            <div class="diag-value">87.4<small>Mbps</small></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════ QR SCAN VIEW ════════════════════ -->
+    <section class="view" id="view-qr">
+
+      <div class="page-head">
+        <h2 class="page-title">QR 코드 스캐너</h2>
+        <button class="btn-line">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-9-9c2.39 0 4.68.94 6.36 2.64L21 8"/><path d="M21 3v5h-5"/></svg>
+          스캔 재시작
+        </button>
+      </div>
+
+      <!-- Scanner -->
+      <div class="card">
+        <div class="section-label"><span class="name">카메라</span></div>
+        <div class="scanner-wrap">
+          <div class="scanner-frame">
+            <div class="scanner-feed">
+              <div>
+                <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>카메라 준비 중...</span>
+              </div>
+            </div>
+            <span class="corner tl"></span>
+            <span class="corner tr"></span>
+            <span class="corner bl"></span>
+            <span class="corner br"></span>
+            <span class="scan-line"></span>
+          </div>
+          <div class="scanner-hint">
+            <span class="accent">QR 코드</span>를 카메라 프레임 안에 비춰주세요.<br>
+            인식되면 자동으로 처리합니다.
+          </div>
+        </div>
+      </div>
+
+      <!-- 최근 스캔 결과 -->
+      <div class="card">
+        <div class="section-label"><span class="name">최근 스캔 결과</span></div>
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="label">유형</div>
+            <div class="value" style="display:flex;align-items:center;gap:8px">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              WiFi 자동 연결
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="label">SSID</div>
+            <div class="value">Sympotalk-Event-5G</div>
+          </div>
+          <div class="info-row">
+            <div class="label">보안</div>
+            <div class="value">WPA2</div>
+          </div>
+          <div class="info-row">
+            <div class="label">스캔 시각</div>
+            <div class="value">3분 전 · 자동 연결 성공</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 지원 형식 가이드 -->
+      <div class="card">
+        <div class="section-label"><span class="name">지원 형식</span></div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-3)">
+          <div style="display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border:1px solid var(--border-base);border-radius:var(--radius)">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--accent);fill:none;stroke-width:1.5;flex-shrink:0"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div>
+              <div style="font:600 13px/1.2 sans-serif;color:var(--text-1)">WiFi 자동 연결</div>
+              <div style="font:500 11px/1.4 sans-serif;color:var(--text-3);margin-top:4px">WIFI:T:WPA;S:&lt;ssid&gt;;P:&lt;password&gt;;; 형식</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border:1px solid var(--border-base);border-radius:var(--radius)">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--text-2);fill:none;stroke-width:1.5;flex-shrink:0"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            <div>
+              <div style="font:600 13px/1.2 sans-serif;color:var(--text-1)">URL 진입</div>
+              <div style="font:500 11px/1.4 sans-serif;color:var(--text-3);margin-top:4px">https://sympotalk.com/... 직접 열기</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════ SETTINGS VIEW ════════════════════ -->
+    <section class="view" id="view-settings">
+
+      <div class="page-head">
+        <h2 class="page-title">설정</h2>
+      </div>
+
+      <!-- Version hero -->
+      <div class="version-hero">
+        <div class="version-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7z"/><path d="M2 7l10 5 10-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+        </div>
+        <div class="version-info">
+          <div class="version-num">1.1.0<small>installed</small></div>
+          <div class="version-build">build 39 · 2026-04-29 · com.sympotalk.launcher</div>
+        </div>
+        <button class="btn-primary">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 116 5.3"/></svg>
+          업데이트 확인
+        </button>
+      </div>
+
+      <!-- App info grid -->
+      <div class="card">
+        <div class="section-label"><span class="name">앱 정보</span></div>
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="label">Build Type</div>
+            <div class="value">Release · Signed</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Target SDK</div>
+            <div class="value">Android 14 (API 34)</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Min SDK</div>
+            <div class="value">Android 9 (API 28)</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Last Update Check</div>
+            <div class="value">방금 전</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs -->
+      <div class="card">
+        <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span class="name">최근 로그</span>
+          <span style="display:flex;gap:6px">
+            <button class="btn-line"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>복사</button>
+            <button class="btn-line"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>지우기</button>
+          </span>
+        </div>
+        <div class="log-list">
+          <div class="log-item">
+            <span class="log-dot info"></span>
+            <span class="log-time">15:42</span>
+            <span class="log-msg">앱 시작
+              <span class="exp">런처가 정상적으로 실행됐습니다.</span>
+            </span>
+          </div>
+          <div class="log-item">
+            <span class="log-dot warn"></span>
+            <span class="log-time">15:38</span>
+            <span class="log-msg">Page Freeze — 시스템이 앱을 일시 정지
+              <span class="exp">시스템이 메모리 확보를 위해 앱을 정지시켰습니다.</span>
+            </span>
+          </div>
+          <div class="log-item">
+            <span class="log-dot error"></span>
+            <span class="log-time">15:30</span>
+            <span class="log-msg">이전 세션 비정상 종료 감지 — 마지막 이벤트: visibility:hidden
+              <span class="exp">이전에 앱이 비정상적으로 종료됐습니다. 메모리 부족이나 시스템 강제 종료가 원인일 수 있습니다.</span>
+            </span>
+          </div>
+          <div class="log-item">
+            <span class="log-dot info"></span>
+            <span class="log-time">15:30</span>
+            <span class="log-msg">WiFi 연결됨 — Sympotalk-Event-5G
+              <span class="exp">192.168.1.42 / 85 dBm</span>
+            </span>
+          </div>
+          <div class="log-item">
+            <span class="log-dot info"></span>
+            <span class="log-time">14:55</span>
+            <span class="log-msg">행사 목록 새로고침 — 3건 로드
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- WiFi default password -->
+      <div class="card">
+        <div class="section-label"><span class="name">WiFi 기본 비밀번호</span></div>
+        <div class="info-grid" style="grid-template-columns: 1fr auto">
+          <div class="info-row">
+            <div class="label">현재 값</div>
+            <div class="value" style="font-family:monospace;letter-spacing:2px">••••••••••••</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-self:center">
+            <button class="btn-line">변경</button>
+            <button class="btn-line">기본값 복원</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="danger-zone">
+        <div class="section-label"><span class="name">위험 영역</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)">
+          <div style="font:500 13px/1.5 sans-serif;color:var(--text-2)">
+            <strong style="color:var(--text-1);display:block;margin-bottom:4px">캐시 및 로그 초기화</strong>
+            저장된 행사 정보, 로그, WiFi 자동 연결 기록을 모두 삭제합니다.
+          </div>
+          <button class="btn-danger-line">초기화</button>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <!-- ─────────── Bottom Nav ─────────── -->
+  <nav id="bottomnav">
+    <button class="nav-btn active" data-view="home" data-title="행사 런처">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      행사
+    </button>
+    <button class="nav-btn" data-view="wifi" data-title="WiFi 네트워크">
+      <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      WiFi
+    </button>
+    <button class="nav-btn" data-view="qr" data-title="QR 코드 스캐너">
+      <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2"/><path d="M17 3h2a2 2 0 012 2v2"/><path d="M21 17v2a2 2 0 01-2 2h-2"/><path d="M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+      QR 스캔
+    </button>
+    <button class="nav-btn" data-view="settings" data-title="설정">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      설정
+    </button>
+  </nav>
+</div>
+
+<!-- ─────────── Modal: Room Picker ─────────── -->
+<div class="modal-backdrop" id="m1">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div class="modal-title">룸 선택<small>2026 추계 대규모 학술대회 — 3개의 룸</small></div>
+      <button class="modal-close" onclick="document.getElementById('m1').classList.remove('show')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-room">
+      <div class="section-label">ROOM 1 · <span class="name">그랜드볼룸</span></div>
+      <div class="room-grid-4">
+        <button class="action-btn"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>콘솔</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>좌장</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg>사회자</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M2 3h20v12H2z"/><path d="M2 15l4 4h12l4-4"/></svg>질문</button>
+      </div>
+    </div>
+    <div class="modal-room">
+      <div class="section-label">ROOM 2 · <span class="name">컨벤션홀 A</span></div>
+      <div class="room-grid-4">
+        <button class="action-btn"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>콘솔</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/></svg>좌장</button>
+        <button class="action-btn" disabled><svg viewBox="0 0 24 24"><path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/></svg>사회자</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M2 3h20v12H2z"/></svg>질문</button>
+      </div>
+    </div>
+    <div class="modal-room">
+      <div class="section-label">ROOM 3 · <span class="name">컨벤션홀 B</span></div>
+      <div class="room-grid-4">
+        <button class="action-btn"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>콘솔</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/></svg>좌장</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/></svg>사회자</button>
+        <button class="action-btn"><svg viewBox="0 0 24 24"><path d="M2 3h20v12H2z"/></svg>질문</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Segmented control (HOME tab only)
+  var segs = document.querySelectorAll('.seg-btn');
+  var panes = {
+    'ongoing': document.querySelector('[data-pane="ongoing"]'),
+    'ended':   document.querySelector('[data-pane="ended"]')
+  };
+  for (var i = 0; i < segs.length; i++) {
+    segs[i].addEventListener('click', function () {
+      for (var j = 0; j < segs.length; j++) segs[j].classList.remove('active');
+      this.classList.add('active');
+      panes['ongoing'].style.display = 'none';
+      panes['ended'].style.display   = 'none';
+      panes[this.getAttribute('data-tab')].style.display = '';
+    });
+  }
+
+  // Modal close on backdrop
+  document.getElementById('m1').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('show');
+  });
+
+  // ── Bottom nav: 실제 view 전환 ──
+  var navs = document.querySelectorAll('.nav-btn');
+  var views = {
+    'home':     document.getElementById('view-home'),
+    'wifi':     document.getElementById('view-wifi'),
+    'qr':       document.getElementById('view-qr'),
+    'settings': document.getElementById('view-settings')
+  };
+  var titleEl = document.getElementById('tb-title');
+  for (var k = 0; k < navs.length; k++) {
+    navs[k].addEventListener('click', function () {
+      var target = this.getAttribute('data-view');
+      var title  = this.getAttribute('data-title');
+
+      for (var l = 0; l < navs.length; l++) navs[l].classList.remove('active');
+      this.classList.add('active');
+
+      for (var v in views) views[v].classList.remove('active');
+      views[target].classList.add('active');
+
+      if (titleEl && title) titleEl.textContent = title;
+      // Scroll to top on switch
+      var view = views[target];
+      if (view && view.scrollTo) view.scrollTo(0, 0);
+    });
+  }
+})();
+</script>
+</body>
+</html>
