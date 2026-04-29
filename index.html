@@ -1,1009 +1,1175 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Sympotalk">
-  <title>Sympotalk 행사 런처</title>
-  <link rel="manifest" href="manifest.json">
-  <!-- jsQR: QR 코드 스캐너 라이브러리 -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sympotalk Launcher v1.1.0</title>
+<!-- jsQR: QR 디코딩 라이브러리 (보존) -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════
+   DESIGN TOKENS — Black + Neon Green (#00FF00)
+   (mockup launcher-redesign.html 기반 그대로 차용)
+═══════════════════════════════════════════════════════ */
+:root {
+  --bg-deep:      #000000;
+  --bg-surface:   #0A0A0A;
+  --bg-elevated:  #141414;
+  --bg-press:     #1A1A1A;
 
-  <style>
-    /* ─── Reset & Base ─────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      font-family: -apple-system, 'Noto Sans KR', 'Malgun Gothic', sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      -webkit-tap-highlight-color: transparent;
-      -webkit-touch-callout: none;
-      user-select: none;
-    }
+  --border-soft:  #1A1A1A;
+  --border-base:  #262626;
+  --border-hover: #3A3A3A;
 
-    /* ─── Layout ───────────────────────────────────────── */
-    /* 100vh 대신 100% 사용 — Android adjustResize 시 viewport 변경을 반영해 bottomnav 가 항상 보임 */
-    #app {
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      height: 100%;
-    }
+  --text-1:       #FAFAFA;
+  --text-2:       #A3A3A3;
+  --text-3:       #6B6B6B;
+  --text-disabled:#404040;
 
-    /* 가상키보드 활성 시 모달을 상단으로 이동 (입력칸이 키보드에 가려지지 않도록)
-     * - visualViewport 로 body.keyboard-open 감지 시 적용
-     * - 모달 내 input focus 시 .kb-visible 백업 적용 (visualViewport 미지원 대비) */
-    body.keyboard-open #default-pw-modal,
-    body.keyboard-open #wifi-password-modal,
-    #default-pw-modal.kb-visible,
-    #wifi-password-modal.kb-visible {
-      align-items: flex-start !important;   /* center → 상단 */
-      padding-top: 20px !important;
-      padding-bottom: calc(var(--kb-height, 0px) + 20px) !important;
-    }
+  --accent:       #00FF00;
+  --accent-soft:  #7CFFB2;
+  --accent-fill:  rgba(0,255,0,0.10);
+  --accent-border:rgba(0,255,0,0.40);
+  --accent-press: rgba(0,255,0,0.20);
+  --accent-glow:  0 0 16px rgba(0,255,0,0.45);
 
-    /* ─── Top Bar ──────────────────────────────────────── */
-    #topbar {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      height: 52px;
-      background: #1e293b;
-      border-bottom: 1px solid #334155;
-      gap: 12px;
-    }
-    #topbar-logo {
-      font-size: 18px;
-      font-weight: 700;
-      color: #60a5fa;
-      letter-spacing: -0.5px;
-    }
-    #topbar-title {
-      flex: 1;
-      font-size: 15px;
-      color: #94a3b8;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #topbar-back {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 12px;
-      background: #334155;
-      border: none;
-      border-radius: 8px;
-      color: #e2e8f0;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    #topbar-back.visible { display: flex; }
-    #topbar-version {
-      flex-shrink: 0;
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      font-family: 'SF Mono', Consolas, monospace;
-      padding: 3px 8px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 5px;
-      letter-spacing: 0.3px;
-    }
+  --warning:      #FFB800;
+  --danger:       #FF3838;
 
-    /* ─── Main Content ─────────────────────────────────── */
-    #main {
-      flex: 1;
-      overflow: hidden;
-      position: relative;
-    }
+  --radius-sm:  8px;
+  --radius:     12px;
+  --radius-lg:  16px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    20px;
+  --space-6:    24px;
+}
 
-    /* ─── Views ────────────────────────────────────────── */
-    .view {
-      display: none;
-      position: absolute;
-      inset: 0;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .view.active { display: block; }
+/* ═══════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-1);
+  font-family: -apple-system, "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+input { font: inherit; }
 
-    /* ─── Bottom Nav ───────────────────────────────────── */
-    #bottomnav {
-      flex-shrink: 0;
-      display: flex;
-      height: 60px;
-      background: #1e293b;
-      border-top: 1px solid #334155;
-    }
-    .nav-btn {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 3px;
-      background: none;
-      border: none;
-      color: #64748b;
-      font-size: 11px;
-      cursor: pointer;
-      transition: color 0.15s, background 0.15s;
-      padding: 6px 0;
-    }
-    .nav-btn.active { color: #60a5fa; background: rgba(96,165,250,0.08); }
-    .nav-btn svg { width: 22px; height: 22px; }
+#app {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+}
 
-    /* ─── Cards & Containers ───────────────────────────── */
-    /* max-width 제거: 1920×1200 LG G Pad 5 등 넓은 태블릿에서 좌우 레터박스 방지 */
-    .page-content {
-      padding: 16px;
-    }
-    .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 10px;
-    }
-    .card {
-      background: #1e293b;
-      border-radius: 12px;
-      border: 1px solid #334155;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
-    .card:active { background: #273549; }
+/* ═══════════════════════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════════════════════ */
+#topbar {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+.tb-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: var(--accent-glow);
+  animation: pulse 1.6s ease-out infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0,255,0,0.6); }
+  70%  { box-shadow: 0 0 0 8px rgba(0,255,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,255,0,0); }
+}
+.tb-logo { font: 700 17px/1 sans-serif; letter-spacing: -0.3px; color: var(--text-1); }
+.tb-divider { color: var(--text-3); font-size: 14px; }
+.tb-title { font: 500 14px/1 sans-serif; color: var(--text-2); flex: 1; }
+.tb-version { font: 500 11px/1 sans-serif; color: var(--text-3); }
 
-    /* ─── Event List ───────────────────────────────────── */
-    #view-home .page-content { padding-top: 16px; }
-    .event-card {
-      display: flex;
-      align-items: center;
-      padding: 16px;
-      gap: 14px;
-      cursor: pointer;
-      transition: background 0.1s;
-    }
-    .event-card:active { background: #273549; }
-    .event-card + .event-card { border-top: 1px solid #334155; }
+/* ═══════════════════════════════════════════════════════
+   MAIN
+═══════════════════════════════════════════════════════ */
+#main {
+  flex: 1; overflow: hidden; position: relative;
+}
+.view {
+  position: absolute; inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-4);
+  display: none;
+}
+.view.active { display: block; }
 
-    /* 좌측: 행사명(크게) + 수정 시각 */
-    .event-name-col {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .event-name {
-      font-size: 19px;          /* 기존 16px → 19px 증가 */
-      font-weight: 700;
-      color: #f1f5f9;
-      line-height: 1.3;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .event-updated {
-      font-size: 12px;
-      color: #475569;
-    }
+/* ═══════════════════════════════════════════════════════
+   PAGE HEADER (segmented control)
+═══════════════════════════════════════════════════════ */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.page-title { font: 700 18px/1 sans-serif; }
 
-    /* 우측: 날짜 / 에이전시 / 담당자 세로 스택 */
-    .event-meta-col {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      font-size: 14px;          /* 기존 12px → 14px 증가 */
-      color: #cbd5e1;
-      flex-shrink: 1;           /* 좁은 화면에서는 축소 허용 */
-      min-width: 120px;
-      max-width: 220px;
-    }
-    /* 좁은 화면(420px 이하) — 카드를 세로 스택으로 전환 */
-    @media (max-width: 420px) {
-      .event-card { flex-wrap: wrap; gap: 8px; }
-      .event-name-col { flex: 1 1 100%; }
-      .event-meta-col {
-        flex: 1 1 auto;
-        font-size: 13px;
-        min-width: auto;
-      }
-      .event-meta-col > div { text-align: left; }
-      .event-badge-col { margin-left: auto; }
-    }
-    .event-meta-col > div {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      text-align: right;
-    }
-    .event-meta-col .meta-agency { color: #94a3b8; }
-    .event-meta-col .meta-manager { color: #94a3b8; }
+.segmented {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  background: transparent; border: 0;
+  padding: 7px 14px; border-radius: 7px;
+  font: 600 13px/1 sans-serif; color: var(--text-2);
+  transition: background 0.15s, color 0.15s;
+}
+.seg-btn.active {
+  background: var(--accent-fill);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
 
-    /* 우측 끝: 상태 배지 + 화살표 세로 */
-    .event-badge-col {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .status-badge {
-      flex-shrink: 0;
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .status-active  { background: rgba(34,197,94,0.15);  color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
-    .status-upcoming{ background: rgba(96,165,250,0.15); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); }
-    .status-ended   { background: rgba(100,116,139,0.15);color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
-    .status-other   { background: rgba(168,85,247,0.12); color: #c4b5fd; border: 1px solid rgba(168,85,247,0.3); }
-    .event-arrow { color: #475569; font-size: 20px; flex-shrink: 0; }
+.btn-refresh, .btn-line {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  color: var(--text-2);
+  font: 500 12px/1 sans-serif;
+  transition: all 0.15s;
+}
+.btn-refresh svg, .btn-line svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.btn-refresh:active, .btn-line:active, .btn-line:hover { color: var(--accent); border-color: var(--accent-border); }
 
-    /* ─── Refresh / Empty ──────────────────────────────── */
-    .refresh-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-    .refresh-bar h2 { font-size: 18px; font-weight: 700; }
-    .btn-refresh {
-      padding: 7px 14px;
-      background: #334155;
-      border: none;
-      border-radius: 8px;
-      color: #94a3b8;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .btn-refresh:active { background: #475569; }
-    .empty-msg {
-      text-align: center;
-      padding: 48px 20px;
-      color: #475569;
-    }
-    .empty-msg .icon { font-size: 48px; margin-bottom: 12px; }
-    .spinner {
-      display: inline-block;
-      width: 24px; height: 24px;
-      border: 3px solid #334155;
-      border-top-color: #60a5fa;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-box {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 48px;
-      gap: 12px;
-      color: #64748b;
-    }
+/* ═══════════════════════════════════════════════════════
+   GENERIC CARD / SECTION
+═══════════════════════════════════════════════════════ */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.section-label {
+  font: 600 11px/1 sans-serif;
+  color: var(--text-3);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 0 0 var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.section-label::before {
+  content: ''; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--text-3);
+}
+.section-label .name { color: var(--text-2); text-transform: none; letter-spacing: 0; font-weight: 500; }
 
-    /* ─── Event Detail ─────────────────────────────────── */
-    .detail-header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
-      padding: 20px 16px;
-      border-bottom: 1px solid #334155;
-      margin-bottom: 16px;
-    }
-    .detail-event-name {
-      font-size: 20px;
-      font-weight: 700;
-      color: #f1f5f9;
-      margin-bottom: 6px;
-    }
-    .detail-event-meta {
-      font-size: 13px;
-      color: #94a3b8;
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
+/* ═══════════════════════════════════════════════════════
+   EVENT CARD (HOME view)
+═══════════════════════════════════════════════════════ */
+.event-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.event-card[data-status="ended"] { opacity: 0.55; }
 
-    /* ─── Link Buttons ─────────────────────────────────── */
-    .link-group { margin-bottom: 20px; }
-    .link-group-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-      padding: 0 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .link-btn {
-      display: flex;
-      align-items: center;
-      width: 100%;
-      padding: 14px 16px;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      color: #e2e8f0;
-      font-size: 15px;
-      cursor: pointer;
-      text-align: left;
-      gap: 12px;
-      margin-bottom: 8px;
-      transition: background 0.1s, border-color 0.1s;
-      text-decoration: none;
-    }
-    .link-btn:active { background: #273549; border-color: #60a5fa; }
-    .link-btn-icon {
-      width: 36px; height: 36px;
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      font-size: 18px;
-    }
-    .icon-attendee  { background: rgba(34,197,94,0.15);  }
-    .icon-console   { background: rgba(96,165,250,0.15); }
-    .icon-chair     { background: rgba(251,191,36,0.15); }
-    .icon-moderator { background: rgba(168,85,247,0.15); }
-    .icon-screen    { background: rgba(6,182,212,0.15);  }
-    .link-btn-info { flex: 1; min-width: 0; }
-    .link-btn-label { font-weight: 600; font-size: 14px; }
-    .link-btn-sub   { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .link-btn-arrow { color: #475569; font-size: 18px; }
+.event-header {
+  display: flex; align-items: center; gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.event-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.event-status-dot[data-status="live"] {
+  background: var(--accent);
+  box-shadow: var(--accent-glow);
+  animation: pulse 1.6s ease-out infinite;
+}
+.event-status-dot[data-status="upcoming"] { border: 1.5px solid var(--text-3); }
+.event-status-dot[data-status="ended"]    { background: var(--text-disabled); }
 
-    /* URL 미설정 경고 */
-    .url-warning {
-      background: rgba(251,191,36,0.1);
-      border: 1px solid rgba(251,191,36,0.3);
-      border-radius: 10px;
-      padding: 12px 16px;
-      font-size: 13px;
-      color: #fbbf24;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+.event-name {
+  flex: 1; font: 700 22px/1.2 sans-serif;
+  letter-spacing: -0.5px; color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.event-time {
+  font: 500 12px/1 sans-serif; color: var(--text-3);
+  flex-shrink: 0;
+}
 
-    /* ─── QR Scanner ───────────────────────────────────── */
-    #view-wifi {
-      background: #0f172a;
-      flex-direction: column;
-    }
-    #view-wifi.active { display: flex; }
-    #wifi-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      padding: 16px;
-      gap: 16px;
-      overflow-y: auto;
-    }
-    #scanner-container {
-      position: relative;
-      width: 100%;
-      max-width: 500px;
-      aspect-ratio: 4/3;
-      background: #000;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #334155;
-    }
-    #qr-video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #000;
-      visibility: hidden;         /* 스트림 준비 전까지 숨김 */
-    }
-    #qr-video.ready { visibility: visible; }
-    #qr-video::-webkit-media-controls-start-playback-button { display: none !important; }
-    #qr-video::-webkit-media-controls { display: none !important; }
-    #qr-canvas { display: none; }
-    /* scan-overlay/frame/line 제거 — 카메라 영상에 간섭하는 프레임/스캔라인 삭제 */
-    #scan-result {
-      width: 100%;
-      max-width: 500px;
-    }
-    #wifi-result-card {
-      display: none;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 16px;
-    }
-    #wifi-result-card.show { display: block; }
-    .wifi-result-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #22c55e;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .wifi-field {
-      margin-bottom: 10px;
-    }
-    .wifi-field-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 4px;
-    }
-    .wifi-field-value {
-      font-size: 18px;
-      font-weight: 700;
-      color: #f1f5f9;
-      background: #0f172a;
-      padding: 10px 14px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      word-break: break-all;
-    }
-    .btn-copy {
-      flex-shrink: 0;
-      padding: 6px 12px;
-      background: #334155;
-      border: none;
-      border-radius: 6px;
-      color: #94a3b8;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .btn-copy.copied { background: #166534; color: #22c55e; }
-    .wifi-security-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 600;
-      background: rgba(96,165,250,0.15);
-      color: #60a5fa;
-      margin-left: 6px;
-    }
-    .qr-raw-card {
-      display: none;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 16px;
-    }
-    .qr-raw-card.show { display: block; }
-    #qr-raw-text {
-      font-size: 14px;
-      color: #94a3b8;
-      word-break: break-all;
-      line-height: 1.5;
-      margin-bottom: 10px;
-    }
-    .wifi-scan-btns {
-      display: flex;
-      gap: 10px;
-      width: 100%;
-      max-width: 500px;
-    }
-    .btn-scan {
-      flex: 1;
-      padding: 14px;
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .btn-scan-start { background: #3b82f6; color: #fff; }
-    .btn-scan-stop  { background: #475569; color: #e2e8f0; }
-    .btn-scan:active { opacity: 0.8; }
-    #scan-status {
-      font-size: 13px;
-      color: #64748b;
-      text-align: center;
-    }
-    .camera-denied {
-      text-align: center;
-      padding: 32px;
-      color: #94a3b8;
-      font-size: 14px;
-      line-height: 1.6;
-    }
+.event-meta {
+  display: flex; gap: var(--space-4); flex-wrap: wrap;
+  font: 500 13px/1.4 sans-serif; color: var(--text-2);
+  margin-bottom: var(--space-4);
+}
+.event-meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.event-meta-item svg { width: 13px; height: 13px; stroke: var(--text-3); fill: none; stroke-width: 2; }
 
-    /* ─── Settings ─────────────────────────────────────── */
-    .settings-group {
-      margin-bottom: 20px;
-    }
-    .settings-group-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-      padding: 0 4px;
-    }
-    .settings-item {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 8px;
-    }
-    .settings-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: #94a3b8;
-      margin-bottom: 8px;
-    }
-    .settings-desc {
-      font-size: 11px;
-      color: #475569;
-      margin-bottom: 8px;
-      line-height: 1.5;
-    }
-    .settings-input {
-      width: 100%;
-      padding: 10px 14px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      color: #e2e8f0;
-      font-size: 14px;
-      outline: none;
-      -webkit-appearance: none;
-    }
-    .settings-input:focus { border-color: #60a5fa; }
-    .btn-save {
-      display: block;
-      width: 100%;
-      padding: 14px;
-      background: #3b82f6;
-      border: none;
-      border-radius: 10px;
-      color: #fff;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 4px;
-    }
-    .btn-save:active { background: #2563eb; }
-    .save-toast {
-      display: none;
-      position: fixed;
-      bottom: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #22c55e;
-      color: #fff;
-      padding: 10px 24px;
-      border-radius: 24px;
-      font-size: 14px;
-      font-weight: 600;
-      z-index: 999;
-      white-space: nowrap;
-    }
-    .save-toast.show { display: block; }
-    .info-box {
-      background: rgba(96,165,250,0.08);
-      border: 1px solid rgba(96,165,250,0.2);
-      border-radius: 10px;
-      padding: 12px 14px;
-      font-size: 13px;
-      color: #93c5fd;
-      line-height: 1.6;
-    }
-    .info-box strong { color: #60a5fa; }
+/* ═══════════════════════════════════════════════════════
+   ACTION ROW — 5버튼 한 줄
+═══════════════════════════════════════════════════════ */
+.action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); }
+.action-row-multi { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.action-row-empty { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-bottom: var(--space-3); }
 
-    /* 앱 업데이트 + 앱 정보 좌우 배치 (태블릿 랜드스케이프용) */
-    .app-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .app-row-col {
-      flex: 1;
-      min-width: 260px;
-      margin-bottom: 0;
-    }
+@media (max-width: 720px) { .action-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 420px) { .action-row { grid-template-columns: repeat(2, 1fr); } }
 
-    /* ─── Room section in detail ───────────────────────── */
-    .room-group {
-      margin-bottom: 20px;
-    }
-    .room-title {
-      font-size: 12px;
-      font-weight: 700;
-      color: #475569;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 6px 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .room-title::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: #1e293b;
-    }
+.action-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font: 500 13px/1 sans-serif;
+  min-height: 92px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.action-btn svg {
+  width: 26px; height: 26px;
+  stroke: currentColor; fill: none; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.action-btn:hover { border-color: var(--border-hover); color: var(--text-1); }
+.action-btn:active {
+  background: var(--accent-press);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 1px var(--accent-border), var(--accent-glow);
+}
+.action-btn[disabled] { opacity: 0.35; pointer-events: none; }
 
-    /* ─── Landscape helpers ────────────────────────────── */
-    @media (orientation: landscape) and (max-height: 600px) {
-      #topbar { height: 44px; }
-      #bottomnav { height: 52px; }
-      .nav-btn { font-size: 10px; }
-      .page-content { padding: 10px 14px; }
-      .detail-header { padding: 12px 14px; }
-    }
+.action-btn-attendee { position: relative; }
+.action-btn-attendee::before {
+  content: '';
+  position: absolute; left: 0; top: 12px; bottom: 12px;
+  width: 2px; background: var(--accent-border); border-radius: 0 2px 2px 0;
+}
+.action-btn-attendee:active::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 
-    /* ─── Scrollbar ────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-  </style>
+.multiroom-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-base);
+  border-radius: var(--radius);
+  color: var(--text-2); font: 500 13px/1 sans-serif;
+  min-height: 92px;
+  transition: all 0.12s;
+}
+.multiroom-btn svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.multiroom-btn .label { font: 600 13px/1 sans-serif; }
+.multiroom-btn .sub { font: 500 11px/1 sans-serif; color: var(--text-3); }
+.multiroom-btn:hover { border-color: var(--border-hover); border-style: solid; color: var(--text-1); }
+.multiroom-btn:active {
+  background: var(--accent-press); border-color: var(--accent-border); border-style: solid;
+  color: var(--accent); transform: scale(0.97);
+  box-shadow: var(--accent-glow);
+}
+
+.empty-rooms {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  font: 500 12px/1.5 sans-serif; color: var(--text-2);
+}
+.empty-rooms svg { width: 16px; height: 16px; stroke: var(--warning); fill: none; stroke-width: 2; flex-shrink: 0; margin-top: 2px; }
+.empty-rooms strong { color: var(--warning); display: block; margin-bottom: 2px; font-weight: 600; font-size: 13px; }
+
+/* ═══════════════════════════════════════════════════════
+   QR / SCANNER VIEW
+═══════════════════════════════════════════════════════ */
+.scanner-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.scanner-frame {
+  position: relative;
+  width: 100%; max-width: 520px; aspect-ratio: 4/3;
+  background: #050505;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+/* 카메라 영역 placeholder (실제 비디오가 attach 되면 z-index 로 덮어쓰임) */
+.scanner-feed {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    repeating-linear-gradient(45deg, #0a0a0a 0 8px, #050505 8px 16px);
+  color: var(--text-3); font: 500 13px/1 sans-serif;
+  z-index: 1;
+}
+.scanner-feed svg { width: 32px; height: 32px; stroke: var(--text-3); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
+.scanner-feed > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* 실 비디오 — 카메라 active 시 placeholder 위에 */
+#qr-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 2;
+  background: #000;
+  display: none;
+}
+#qr-video.ready { display: block; }
+#qr-canvas { display: none; }
+
+/* 코너 브래킷 */
+.corner {
+  position: absolute; width: 36px; height: 36px;
+  border-color: var(--accent);
+  border-style: solid;
+  filter: drop-shadow(0 0 8px rgba(0,255,0,0.6));
+  z-index: 3;
+}
+.corner.tl { top: 14px; left: 14px;    border-width: 2px 0 0 2px; border-radius: 8px 0 0 0; }
+.corner.tr { top: 14px; right: 14px;   border-width: 2px 2px 0 0; border-radius: 0 8px 0 0; }
+.corner.bl { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 8px; }
+.corner.br { bottom: 14px; right: 14px;border-width: 0 2px 2px 0; border-radius: 0 0 8px 0; }
+
+/* 스캔 라인 애니메이션 */
+.scan-line {
+  position: absolute; left: 14px; right: 14px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 12px rgba(0,255,0,0.6);
+  animation: scan 2.4s ease-in-out infinite;
+  z-index: 3;
+}
+@keyframes scan {
+  0%, 100% { top: 14px; opacity: 0.3; }
+  50%      { top: calc(100% - 14px); opacity: 1; }
+}
+
+.scanner-hint {
+  font: 500 13px/1.4 sans-serif; color: var(--text-2);
+  text-align: center;
+}
+.scanner-hint .accent { color: var(--accent); font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════
+   WIFI VIEW
+═══════════════════════════════════════════════════════ */
+.quick-actions {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+/* WiFi list */
+.wifi-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.wifi-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  transition: all 0.12s;
+}
+.wifi-item:hover { border-color: var(--border-hover); }
+.wifi-item.connected { border-color: var(--accent-border); background: var(--accent-fill); }
+.wifi-icon { width: 22px; height: 22px; stroke: var(--text-2); fill: none; stroke-width: 1.5; flex-shrink: 0; }
+.wifi-item.connected .wifi-icon { stroke: var(--accent); }
+.wifi-info { flex: 1; min-width: 0; }
+.wifi-ssid { font: 600 14px/1.2 sans-serif; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wifi-meta { display: flex; gap: var(--space-3); margin-top: 4px; font: 500 11px/1 sans-serif; color: var(--text-3); }
+.wifi-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+.wifi-meta-item svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+.wifi-action {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  font: 600 12px/1 sans-serif; color: var(--text-2);
+  transition: all 0.12s;
+}
+.wifi-action:hover { border-color: var(--border-hover); color: var(--text-1); }
+.wifi-action:active { border-color: var(--accent-border); color: var(--accent); }
+.wifi-badge-connected {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font: 700 11px/1 sans-serif; color: var(--accent);
+  letter-spacing: 0.4px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+/* Network diagnostic */
+.diag-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.diag-result {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.diag-cell {
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+}
+.diag-label { font: 600 11px/1 sans-serif; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.6px; }
+.diag-value {
+  margin-top: 8px;
+  font: 700 24px/1 sans-serif;
+  color: var(--accent);
+  word-break: break-all;
+}
+.diag-value small { font: 500 13px/1 sans-serif; color: var(--text-2); margin-left: 4px; }
+.diag-value.warn { color: var(--warning); }
+.diag-value.danger { color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════════
+   SETTINGS VIEW
+═══════════════════════════════════════════════════════ */
+.version-hero {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  display: flex; align-items: center; gap: var(--space-5);
+}
+.version-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.version-icon svg { width: 28px; height: 28px; stroke: var(--accent); fill: none; stroke-width: 1.5; filter: drop-shadow(0 0 6px rgba(0,255,0,0.5)); }
+.version-info { flex: 1; min-width: 0; }
+.version-num { font: 700 28px/1 sans-serif; color: var(--text-1); letter-spacing: -1px; }
+.version-num small { font: 500 13px/1 sans-serif; color: var(--text-3); margin-left: 8px; letter-spacing: 0; }
+.version-build { margin-top: 6px; font: 500 12px/1 sans-serif; color: var(--text-3); }
+
+.btn-primary {
+  padding: 10px 18px;
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  color: var(--accent);
+  font: 600 13px/1 sans-serif;
+  display: inline-flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+  transition: all 0.12s;
+}
+.btn-primary svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.btn-primary:hover { background: var(--accent-press); }
+.btn-primary:active { transform: scale(0.97); box-shadow: var(--accent-glow); }
+
+/* Info row pairs */
+.info-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.info-row {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+}
+.info-row .label { font: 500 11px/1 sans-serif; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.info-row .value { margin-top: 6px; font: 600 13px/1.3 sans-serif; color: var(--text-1); word-break: break-all; }
+
+/* Log viewer */
+.log-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.log-item {
+  display: grid; grid-template-columns: 8px 60px 1fr;
+  align-items: start; gap: var(--space-3);
+  padding: var(--space-3); border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  font: 500 12px/1.4 sans-serif;
+}
+.log-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+.log-dot.error   { background: var(--danger); }
+.log-dot.warn    { background: var(--warning); }
+.log-dot.info    { background: var(--text-3); }
+.log-dot.success { background: var(--accent); }
+.log-time { color: var(--text-3); font-size: 11px; padding-top: 2px; }
+.log-msg { color: var(--text-1); word-break: break-word; }
+.log-msg .exp { display: block; color: var(--text-2); font-size: 11px; margin-top: 3px; line-height: 1.4; }
+
+/* Danger zone */
+.danger-zone {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255,56,56,0.25);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.danger-zone .section-label { color: var(--danger); }
+.danger-zone .section-label::before { background: var(--danger); }
+
+.btn-danger-line {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255,56,56,0.3);
+  border-radius: 8px;
+  color: var(--danger);
+  font: 600 12px/1 sans-serif;
+}
+.btn-danger-line:hover { background: rgba(255,56,56,0.05); border-color: rgba(255,56,56,0.5); }
+
+/* ═══════════════════════════════════════════════════════
+   BOTTOM NAV
+═══════════════════════════════════════════════════════ */
+#bottomnav {
+  flex-shrink: 0;
+  display: flex; height: 64px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-soft);
+}
+.nav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  background: none; border: none;
+  color: var(--text-3);
+  font: 500 11px/1 sans-serif;
+  position: relative;
+  transition: color 0.15s;
+}
+.nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.nav-btn.active { color: var(--accent); }
+.nav-btn.active::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 28px; height: 2px; background: var(--accent); border-radius: 0 0 2px 2px;
+  box-shadow: 0 0 8px rgba(0,255,0,0.6);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODAL (mockup 기반 통합 스타일)
+═══════════════════════════════════════════════════════ */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  padding: var(--space-5);
+  z-index: 100;
+  backdrop-filter: blur(4px);
+}
+.modal-backdrop.show { display: flex; }
+.modal {
+  width: 100%; max-width: 640px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 20px 80px rgba(0,0,0,0.6);
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.modal-title { font: 700 18px/1.2 sans-serif; color: var(--text-1); }
+.modal-title small { display: block; font: 500 12px/1 sans-serif; color: var(--text-3); margin-top: 4px; }
+.modal-close {
+  background: transparent; border: 0; color: var(--text-2);
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { background: var(--bg-press); color: var(--text-1); }
+.modal-close svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+.modal-room { padding: var(--space-3) 0; border-top: 1px solid var(--border-soft); }
+.modal-room:first-of-type { border-top: 0; padding-top: 0; }
+.room-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+@media (max-width: 540px) { .room-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── 비밀번호 모달 (보존 — flex 모드 기존 함수가 display:flex 로 직접 set) ── */
+.pw-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  padding: var(--space-5);
+  z-index: 110;
+  backdrop-filter: blur(4px);
+}
+.pw-modal-card {
+  width: 100%; max-width: 420px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+.pw-modal-card .pw-title {
+  font: 700 16px/1.2 sans-serif; color: var(--text-1); margin-bottom: 4px;
+}
+.pw-modal-card .pw-sub {
+  font: 500 12px/1.5 sans-serif; color: var(--text-2); margin-bottom: var(--space-3);
+}
+.pw-input {
+  width: 100%; padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font: 500 14px/1 sans-serif;
+  margin-bottom: var(--space-3);
+}
+.pw-input:focus { outline: none; border-color: var(--accent-border); }
+.pw-check-row {
+  display: flex; align-items: center; gap: 6px;
+  font: 500 12px/1 sans-serif; color: var(--text-2);
+  margin-bottom: var(--space-4);
+}
+.pw-btn-row { display: flex; gap: var(--space-2); }
+.pw-btn {
+  flex: 1; padding: 10px 12px;
+  border-radius: 10px;
+  font: 600 13px/1 sans-serif;
+  border: 1px solid var(--border-base);
+  background: var(--bg-press); color: var(--text-1);
+  transition: all 0.12s;
+}
+.pw-btn:hover { border-color: var(--border-hover); }
+.pw-btn-primary {
+  background: var(--accent-fill);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.pw-btn-primary:hover { background: var(--accent-press); }
+.pw-btn-danger {
+  background: rgba(255,56,56,0.08);
+  border-color: rgba(255,56,56,0.3);
+  color: var(--danger);
+}
+.pw-modal-card .auto-fill-hint {
+  display: none;
+  font: 500 11px/1.4 sans-serif; color: var(--accent);
+  margin-bottom: var(--space-3);
+}
+
+/* ── Toast ── */
+.save-toast {
+  position: fixed; left: 50%; bottom: 88px;
+  transform: translateX(-50%) translateY(20px);
+  padding: 10px 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-border);
+  border-radius: 24px;
+  color: var(--accent);
+  font: 600 13px/1 sans-serif;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6), var(--accent-glow);
+  z-index: 200;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+.save-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── 네트워크 경고 배너 ── */
+#network-banner {
+  background: rgba(255,184,0,0.08);
+  border: 1px solid rgba(255,184,0,0.3);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: var(--space-4);
+  display: none;
+}
+#network-banner .nb-row { display: flex; align-items: center; gap: 10px; }
+#network-banner .nb-icon { font-size: 20px; }
+#network-banner .nb-text {
+  flex: 1; font: 500 12px/1.5 sans-serif; color: var(--text-2);
+}
+#network-banner .nb-text strong { color: var(--warning); display: block; font-size: 13px; }
+
+/* ── Loading box / Empty msg ── */
+.loading-box {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  color: var(--text-2);
+  font: 500 13px/1 sans-serif;
+}
+.loading-box .spinner {
+  width: 24px; height: 24px;
+  border: 2px solid var(--border-base);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  color: var(--text-2);
+  font: 500 13px/1.5 sans-serif;
+  text-align: center;
+}
+.empty-msg .icon { font-size: 32px; }
+.empty-msg small { color: var(--text-3); font-size: 11px; display: block; margin-top: 4px; }
+
+/* ── 가상키보드 대응 ── */
+body.keyboard-open .pw-modal { align-items: flex-start; padding-top: 24px; }
+
+/* ── QR 결과 카드 ── */
+.qr-result-empty {
+  text-align: center; color: var(--text-3);
+  font: 500 12px/1.5 sans-serif;
+  padding: var(--space-4);
+}
+</style>
 </head>
 <body>
-
 <div id="app">
 
-  <!-- ── Top Bar ─────────────────────────────────────── -->
+  <!-- ─────────── Top Bar ─────────── -->
   <header id="topbar">
-    <button id="topbar-back" onclick="handleBack()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><polyline points="15 18 9 12 15 6"/></svg>
-      뒤로
-    </button>
-    <div id="topbar-logo">Sympotalk</div>
-    <div id="topbar-title">행사 런처</div>
-    <span id="topbar-version" title="현재 설치된 APK 버전">-</span>
+    <span class="tb-dot"></span>
+    <span class="tb-logo">Sympotalk</span>
+    <span class="tb-divider">·</span>
+    <span class="tb-title" id="tb-title">행사 런처</span>
+    <span class="tb-version" id="topbar-version" title="현재 설치된 APK 버전">v1.1.0</span>
   </header>
 
-  <!-- ── Main Content ────────────────────────────────── -->
+  <!-- ─────────── Main ─────────── -->
   <div id="main">
 
-    <!-- 행사 목록 -->
-    <section id="view-home" class="view active">
-      <div class="page-content">
-        <!-- 네트워크 경고 배너 (오프라인일 때만 노출) -->
-        <div id="network-banner" style="display:none;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px 14px;margin-bottom:14px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="font-size:20px">📶</div>
-            <div style="flex:1;font-size:13px;color:#fbbf24;line-height:1.5">
-              <strong>인터넷 연결 실패</strong><br>
-              <span id="network-banner-msg" style="color:#cbd5e1;font-weight:400">WiFi 연결을 확인해주세요</span>
-            </div>
-            <button class="btn-save" style="width:auto;padding:8px 12px;margin:0;background:#60a5fa" onclick="openWifiSettings()">📶 WiFi</button>
-          </div>
-        </div>
+    <!-- ════════════════════ HOME VIEW ════════════════════ -->
+    <section class="view active" id="view-home">
 
-        <div class="refresh-bar">
-          <h2>진행 예정 행사</h2>
-          <button class="btn-refresh" onclick="loadEvents()">
-            <span id="refresh-spinner" style="display:none"><div class="spinner" style="width:14px;height:14px;border-width:2px;vertical-align:middle;margin-right:4px;display:inline-block"></div></span>
-            새로고침
+      <!-- 네트워크 경고 배너 (loadEvents 실패 시 노출) -->
+      <div id="network-banner">
+        <div class="nb-row">
+          <div class="nb-icon">📶</div>
+          <div class="nb-text">
+            <strong>인터넷 연결 실패</strong>
+            <span id="network-banner-msg">WiFi 연결을 확인해주세요</span>
+          </div>
+          <button class="btn-line" onclick="openWifiSettings()">WiFi 설정</button>
+        </div>
+      </div>
+
+      <div class="page-head">
+        <div class="segmented">
+          <button class="seg-btn active" data-tab="ongoing">진행 예정</button>
+          <button class="seg-btn" data-tab="ended">지난 행사</button>
+        </div>
+        <button class="btn-refresh" onclick="loadEvents()">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          새로고침
+        </button>
+      </div>
+
+      <!-- 진행 예정 (active + upcoming) -->
+      <div data-pane="ongoing" id="pane-ongoing">
+        <div class="loading-box">
+          <div class="spinner"></div>
+          <span>행사 목록 불러오는 중...</span>
+        </div>
+      </div>
+
+      <!-- 지난 행사 (ended) -->
+      <div data-pane="ended" id="pane-ended" style="display:none">
+        <div class="loading-box">
+          <div class="spinner"></div>
+          <span>지난 행사 불러오는 중...</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ════════════════════ WIFI VIEW ════════════════════ -->
+    <section class="view" id="view-wifi">
+
+      <div class="page-head">
+        <h2 class="page-title">WiFi 네트워크</h2>
+        <button class="btn-line" onclick="refreshWifiList()">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          새로고침
+        </button>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="card">
+        <div class="section-label"><span class="name">빠른 동작</span></div>
+        <div class="quick-actions">
+          <button class="action-btn" onclick="openWifiSettings()">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            시스템 설정
+          </button>
+          <button class="action-btn" onclick="openDefaultPwModal()">
+            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            기본 비밀번호
+          </button>
+          <button class="action-btn" onclick="refreshWifiList()">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            WiFi 새로고침
           </button>
         </div>
-        <div id="event-list-container">
-          <div class="loading-box">
-            <div class="spinner"></div>
-            <span>행사 목록 불러오는 중...</span>
+      </div>
+
+      <!-- Networks -->
+      <div class="card">
+        <div class="section-label"><span class="name">주변 네트워크</span></div>
+        <div id="wifi-scan-status" style="font:500 12px/1.5 sans-serif;color:var(--text-3);margin-bottom:var(--space-3)">새로고침 버튼을 눌러 주변 WiFi 를 검색하세요</div>
+        <div class="wifi-list" id="wifi-list"></div>
+        <div id="current-wifi" style="margin-top:var(--space-3);font:500 12px/1.4 sans-serif;color:var(--text-3)"></div>
+      </div>
+
+      <!-- Network Diagnostic -->
+      <div class="card">
+        <div class="section-label"><span class="name">네트워크 진단</span></div>
+        <div class="diag-grid">
+          <button class="action-btn" id="btn-ping" onclick="runPingTest()">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Ping 테스트
+          </button>
+          <button class="action-btn" id="btn-speed" onclick="runSpeedTest()">
+            <svg viewBox="0 0 24 24"><path d="M12 2v6m0 0l-3-3m3 3l3-3"/><path d="M2 12h20"/><path d="M12 22v-6m0 0l3 3m-3-3l-3 3"/></svg>
+            Speed Test
+          </button>
+          <button class="action-btn" id="btn-net-diag" onclick="runNetworkDiagnostic()">
+            <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            전체 진단
+          </button>
+        </div>
+        <div class="diag-result">
+          <div class="diag-cell">
+            <div class="diag-label">Ping</div>
+            <div class="diag-value" id="ping-result">—</div>
+          </div>
+          <div class="diag-cell">
+            <div class="diag-label">Speed / 진단</div>
+            <div class="diag-value" id="speed-result">—</div>
           </div>
         </div>
-        <div id="last-refresh" style="text-align:center;font-size:11px;color:#475569;margin-top:12px;"></div>
+        <div id="net-diag-result" style="margin-top:var(--space-3);font:500 12px/1.6 sans-serif;color:var(--text-2)"></div>
       </div>
+
     </section>
 
-    <!-- 행사 상세 -->
-    <section id="view-detail" class="view">
-      <div class="detail-header" id="detail-header">
-        <div class="detail-event-name" id="detail-name">-</div>
-        <div class="detail-event-meta" id="detail-meta"></div>
+    <!-- ════════════════════ QR SCAN VIEW ════════════════════ -->
+    <section class="view" id="view-qr">
+
+      <div class="page-head">
+        <h2 class="page-title">QR 코드 스캐너</h2>
+        <button class="btn-line" onclick="restartScanner()">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-9-9c2.39 0 4.68.94 6.36 2.64L21 8"/><path d="M21 3v5h-5"/></svg>
+          스캔 재시작
+        </button>
       </div>
-      <div class="page-content">
-        <div id="detail-url-warning" class="url-warning" style="display:none">
-          ⚠️ 링크 기본 주소가 설정되지 않았습니다. <strong>설정</strong> 탭에서 주소를 입력해주세요.
-        </div>
-        <div id="detail-links-container">
-          <div class="loading-box">
-            <div class="spinner"></div>
-            <span>링크 불러오는 중...</span>
+
+      <!-- Scanner -->
+      <div class="card">
+        <div class="section-label"><span class="name">카메라</span></div>
+        <div class="scanner-wrap">
+          <div class="scanner-frame">
+            <div class="scanner-feed">
+              <div>
+                <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span id="scan-status">카메라 준비 중...</span>
+              </div>
+            </div>
+            <video id="qr-video" playsinline muted webkit-playsinline disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
+            <canvas id="qr-canvas"></canvas>
+            <span class="corner tl"></span>
+            <span class="corner tr"></span>
+            <span class="corner bl"></span>
+            <span class="corner br"></span>
+            <span class="scan-line"></span>
+          </div>
+          <div class="scanner-hint">
+            <span class="accent">QR 코드</span>를 카메라 프레임 안에 비춰주세요.<br>
+            인식되면 자동으로 처리합니다.
           </div>
         </div>
       </div>
+
+      <!-- 최근 스캔 결과 -->
+      <div class="card">
+        <div class="section-label"><span class="name">최근 스캔 결과</span></div>
+        <div id="qr-result-area">
+          <div class="qr-result-empty">아직 인식된 QR 이 없습니다</div>
+        </div>
+      </div>
+
+      <!-- 지원 형식 가이드 -->
+      <div class="card">
+        <div class="section-label"><span class="name">지원 형식</span></div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-3)">
+          <div style="display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border:1px solid var(--border-base);border-radius:var(--radius)">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--accent);fill:none;stroke-width:1.5;flex-shrink:0"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            <div>
+              <div style="font:600 13px/1.2 sans-serif;color:var(--text-1)">URL 진입</div>
+              <div style="font:500 11px/1.4 sans-serif;color:var(--text-3);margin-top:4px">https://sympotalk.com/... 자동 열기</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border:1px solid var(--border-base);border-radius:var(--radius)">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--text-2);fill:none;stroke-width:1.5;flex-shrink:0"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <div>
+              <div style="font:600 13px/1.2 sans-serif;color:var(--text-1)">기타 텍스트</div>
+              <div style="font:500 11px/1.4 sans-serif;color:var(--text-3);margin-top:4px">URL 이 아닌 경우 원문 표시</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </section>
 
-    <!-- QR 링크 스캐너 -->
-    <section id="view-wifi" class="view">
-      <div id="wifi-content">
-        <div id="scanner-container" style="display:none">
-          <video id="qr-video" playsinline muted webkit-playsinline disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
-          <canvas id="qr-canvas"></canvas>
-          <!-- 오버레이(프레임/라인) 제거: 카메라 영상에 간섭하지 않도록 -->
+    <!-- ════════════════════ SETTINGS VIEW ════════════════════ -->
+    <section class="view" id="view-settings">
+
+      <div class="page-head">
+        <h2 class="page-title">설정</h2>
+      </div>
+
+      <!-- Version hero -->
+      <div class="version-hero">
+        <div class="version-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7z"/><path d="M2 7l10 5 10-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
         </div>
+        <div class="version-info">
+          <div class="version-num" id="settings-version-num">1.1.0<small>installed</small></div>
+          <div class="version-build" id="settings-version-build">com.sympotalk.launcher</div>
+        </div>
+        <button class="btn-primary" id="btn-check-app-update" onclick="checkAppUpdate()">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 116 5.3"/></svg>
+          업데이트 확인
+        </button>
+      </div>
 
-        <div id="scan-status" style="margin-top:8px">웹 링크 QR 코드를 카메라에 비춰주세요</div>
-
-        <div id="scan-result" style="width:100%;max-width:500px">
-          <div id="qr-url-card" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px">
-            <div style="font-size:14px;font-weight:700;color:#22c55e;margin-bottom:12px">✅ 링크 감지됨</div>
-            <div class="wifi-field">
-              <div class="wifi-field-label">URL</div>
-              <div class="wifi-field-value">
-                <span id="qr-url-text" style="font-size:13px;word-break:break-all">-</span>
-              </div>
-            </div>
-            <button class="btn-save" style="margin-top:12px" id="btn-open-qr-url">
-              🔗 브라우저에서 열기
-            </button>
+      <!-- 앱 업데이트 진행 영역 (숨김 기본) -->
+      <div class="card" id="app-update-status-card" style="display:none">
+        <div class="section-label"><span class="name">앱 업데이트</span></div>
+        <div id="app-update-status" style="font:500 12px/1.5 sans-serif;color:var(--text-2)"></div>
+        <!-- 다운로드 진행 -->
+        <div id="app-download-progress-wrap" style="display:none;margin-top:var(--space-3)">
+          <div style="font:500 12px/1.4 sans-serif;color:var(--text-2);margin-bottom:6px">
+            다운로드 중... <span id="app-download-percent">0%</span>
           </div>
+          <div style="height:6px;background:var(--bg-press);border-radius:3px;overflow:hidden">
+            <div id="app-download-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div>
+          </div>
+        </div>
+        <!-- 새 버전 발견 패널 -->
+        <div id="app-update-available" style="display:none;margin-top:var(--space-3);padding:var(--space-3);background:var(--accent-fill);border:1px solid var(--accent-border);border-radius:var(--radius)">
+          <div style="font:700 14px/1.2 sans-serif;color:var(--accent);margin-bottom:6px">
+            새 버전: <span id="app-update-from">-</span> → <span id="app-update-avail-version">-</span>
+          </div>
+          <div style="font:500 11px/1.4 sans-serif;color:var(--text-2);margin-bottom:var(--space-3)">
+            Android 네이티브 + HTML 을 함께 최신으로 교체합니다
+          </div>
+          <div id="app-update-avail-notes" style="font:500 12px/1.5 sans-serif;color:var(--text-2);margin-bottom:var(--space-3);max-height:160px;overflow-y:auto"></div>
+          <button class="btn-primary" onclick="startAppDownload()">지금 업데이트</button>
+        </div>
+        <!-- 설치 미완료 패널 -->
+        <div id="app-install-failed" style="display:none;margin-top:var(--space-3);padding:var(--space-3);background:rgba(255,184,0,0.08);border:1px solid rgba(255,184,0,0.3);border-radius:var(--radius)">
+          <div style="font:700 14px/1.2 sans-serif;color:var(--warning);margin-bottom:var(--space-2)">
+            업데이트가 완료되지 않았습니다
+          </div>
+          <div style="font:500 12px/1.4 sans-serif;color:var(--text-2);margin-bottom:var(--space-3)">
+            설치가 취소되었거나 서명 불일치로 거부되었을 수 있습니다.
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-line" onclick="checkAppUpdate()">다시 시도</button>
+            <button class="btn-danger-line" onclick="uninstallAndReinstall()">삭제 후 재설치</button>
+          </div>
+        </div>
+        <!-- (숨김) 현재/최신 텍스트 백업 — 보존 코드와 호환 -->
+        <span id="app-update-current" style="display:none">-</span>
+        <span id="app-update-latest" style="display:none">-</span>
+      </div>
 
-          <div id="qr-raw-card" style="margin-top:10px">
-            <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:8px">
-              📎 QR 내용 (URL 아님)
-            </div>
-            <div id="qr-raw-text">-</div>
-            <button class="btn-copy" onclick="copyText('qr-raw-text', this)" style="margin-top:4px">전체 복사</button>
+      <!-- 앱 정보 grid -->
+      <div class="card">
+        <div class="section-label"><span class="name">앱 정보</span></div>
+        <div class="info-grid">
+          <div class="info-row">
+            <div class="label">설치된 APK</div>
+            <div class="value" id="info-apk-ver">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">실행 환경</div>
+            <div class="value" id="info-env">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Android</div>
+            <div class="value" id="info-android">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">WebView</div>
+            <div class="value" id="info-webview">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">프록시 캐시</div>
+            <div class="value" id="info-proxy-cache">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">마지막 체크</div>
+            <div class="value" id="info-last-check">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">Supabase</div>
+            <div class="value" id="info-supabase">-</div>
+          </div>
+          <div class="info-row">
+            <div class="label">GitHub</div>
+            <div class="value" id="info-github">-</div>
+          </div>
+        </div>
+        <!-- 핫패치 안내 (보존 코드 호환) -->
+        <div id="info-hotpatch-row" style="display:none;margin-top:var(--space-3);padding:var(--space-3);background:var(--accent-fill);border:1px solid var(--accent-border);border-radius:var(--radius);font:500 12px/1.4 sans-serif;color:var(--accent)">
+          웹 리소스는 <span id="info-content-ver">-</span> 로 자동 갱신됨 (APK 업데이트 시 동기화)
+        </div>
+      </div>
+
+      <!-- Logs -->
+      <div class="card">
+        <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span class="name">최근 로그 <span id="app-log-count" style="color:var(--text-3);font-weight:500;margin-left:6px">-</span></span>
+          <span style="display:flex;gap:6px">
+            <button class="btn-line" onclick="renderLogUI()">새로고침</button>
+            <button class="btn-line" onclick="copyLogs()"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>복사</button>
+            <button class="btn-line" onclick="clearLogs()"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>지우기</button>
+          </span>
+        </div>
+        <div class="log-list" id="app-log-list"></div>
+      </div>
+
+      <!-- WiFi default password -->
+      <div class="card">
+        <div class="section-label"><span class="name">WiFi 기본 비밀번호</span></div>
+        <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap">
+          <div class="info-row" style="flex:1;min-width:200px">
+            <div class="label">현재 값</div>
+            <div class="value" style="font-family:monospace;letter-spacing:2px">••••••••••••</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-self:center">
+            <button class="btn-line" onclick="openDefaultPwModal()">변경</button>
+            <button class="btn-line" onclick="resetDefaultPassword()">기본값 복원</button>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- 설정 -->
-    <section id="view-settings" class="view">
-      <div class="page-content">
-
-        <div class="settings-group">
-          <div class="settings-group-title">네트워크 (WiFi)</div>
-
-          <div class="settings-item">
-            <div class="settings-label">현재 연결</div>
-            <div id="current-wifi" style="font-size:15px;font-weight:600;color:#22c55e;padding:8px 0">
-              -
-            </div>
-            <!-- 3개 버튼을 한 줄로 배치 -->
-            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px" onclick="refreshWifiList()">
-                🔍 주변 스캔
-              </button>
-              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px;background:#334155;color:#e2e8f0" onclick="openWifiSettings()">
-                ⚙️ 시스템 설정
-              </button>
-              <button class="btn-save" style="flex:1;min-width:110px;padding:10px 8px;font-size:13px;background:#475569;color:#e2e8f0" onclick="openDefaultPwModal()">
-                🔑 기본 비밀번호
-              </button>
-            </div>
-            <div id="wifi-scan-status" style="font-size:12px;color:#64748b;margin-top:8px;text-align:center"></div>
+      <!-- Danger zone -->
+      <div class="danger-zone">
+        <div class="section-label"><span class="name">위험 영역</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);flex-wrap:wrap">
+          <div style="font:500 13px/1.5 sans-serif;color:var(--text-2);flex:1;min-width:200px">
+            <strong style="color:var(--text-1);display:block;margin-bottom:4px">캐시 및 로그 초기화</strong>
+            저장된 행사 정보, 로그, WiFi 자동 연결 기록을 모두 삭제합니다.
           </div>
-
-          <!-- 주변 WiFi 목록 (max-height: 7개 항목) -->
-          <div id="wifi-list" style="display:none;margin-top:8px;max-height:420px;overflow-y:auto;border-radius:10px"></div>
+          <button class="btn-danger-line" onclick="clearAllAppData()">초기화</button>
         </div>
-
-        <!-- 기본 비밀번호 변경 모달 — backdrop 클릭 닫기 제거
-             (키보드 활성 시 layout shift 로 touchend 가 backdrop 에 떨어지는 race 방지) -->
-        <div id="default-pw-modal"
-          style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
-          <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
-            <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:4px">🔑 기본 WiFi 비밀번호</div>
-            <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">
-              저장 시 스캔 목록에 <strong>⚡ 원탭 연결</strong> 버튼이 표시되고,
-              비밀번호 모달에 자동 채움됩니다.
-            </div>
-            <input type="password" id="modal-default-pw-input" class="settings-input"
-              placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
-              style="margin-bottom:10px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
-              <input type="checkbox" id="modal-default-pw-show" onchange="toggleModalDefaultPwVisible()">
-              비밀번호 표시
-            </label>
-            <div style="display:flex;gap:8px">
-              <button class="btn-save" style="flex:1;background:#475569;color:#e2e8f0" onclick="closeDefaultPwModal()">취소</button>
-              <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="resetDefaultPassword()">기본값으로 복원</button>
-              <button class="btn-save" style="flex:1" onclick="saveDefaultPasswordFromModal()">저장</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- WiFi 비밀번호 입력 모달 -->
-        <div id="wifi-password-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px">
-          <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;max-width:400px;width:100%">
-            <div style="font-size:14px;color:#64748b;margin-bottom:4px">연결할 네트워크</div>
-            <div id="wifi-modal-ssid" style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:14px">-</div>
-            <div style="font-size:12px;color:#64748b;margin-bottom:6px">비밀번호</div>
-            <input type="password" id="wifi-modal-password" class="settings-input"
-              placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false"
-              style="margin-bottom:6px">
-            <div id="auto-fill-hint" style="display:none;font-size:11px;color:#93c5fd;margin-bottom:10px">
-              ⚡ 자주 쓰는 비밀번호가 자동 입력되었습니다
-            </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;margin-bottom:14px">
-              <input type="checkbox" id="wifi-show-password" onchange="toggleWifiPasswordVisible()">
-              비밀번호 표시
-            </label>
-            <div style="display:flex;gap:8px">
-              <button class="btn-save" style="flex:1;background:#475569;color:#e2e8f0" onclick="closeWifiPasswordModal()">취소</button>
-              <button class="btn-save" style="flex:1" onclick="submitWifiPassword()">연결</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">네트워크 진단</div>
-          <div class="settings-item">
-            <div class="settings-desc">
-              연결 가능 여부 · 공유기 응답속도(LAN Ping) · 실효 인터넷 속도를 측정합니다.
-            </div>
-            <!-- 3개 버튼을 한 줄로 배치 -->
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runNetworkDiagnostic()" id="btn-net-diag">
-                🌐 연결
-              </button>
-              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runPingTest()" id="btn-ping">
-                📡 LAN Ping
-              </button>
-              <button class="btn-save" style="flex:1;min-width:120px;padding:10px 8px;font-size:13px" onclick="runSpeedTest()" id="btn-speed">
-                ⚡ 속도
-              </button>
-            </div>
-            <div id="net-diag-result" style="font-size:12px;margin-top:10px;line-height:1.8"></div>
-            <div id="ping-result" style="font-size:12px;margin-top:8px;line-height:1.8"></div>
-            <div id="speed-result" style="font-size:12px;margin-top:8px;line-height:1.8"></div>
-          </div>
-        </div>
-
-        <!-- 앱 업데이트 + 앱 정보 한 줄(좌우 분할) -->
-        <div class="settings-group app-row">
-          <!-- 앱 업데이트 섹션 -->
-          <div class="settings-item app-row-col">
-            <div class="settings-group-title" style="margin:0 0 8px 0">앱 업데이트</div>
-            <div style="display:flex;gap:8px;font-size:13px;color:#94a3b8;padding:4px 0 10px 0">
-              <span>현재 <strong id="app-update-current" style="color:#f1f5f9">-</strong></span>
-              <span style="margin-left:auto">최신 <strong id="app-update-latest" style="color:#60a5fa">-</strong></span>
-            </div>
-            <button class="btn-save" onclick="checkAppUpdate()" id="btn-check-app-update">
-              🔄 업데이트 확인
-            </button>
-            <div id="app-update-status" style="font-size:12px;color:#64748b;text-align:center;padding:6px 0"></div>
-
-            <!-- 다운로드 진행 바 -->
-            <div id="app-download-progress-wrap" style="display:none;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px;margin-top:6px">
-              <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">
-                📥 다운로드 중... <span id="app-download-percent">0%</span>
-              </div>
-              <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden">
-                <div id="app-download-bar" style="height:100%;background:#60a5fa;width:0%;transition:width 0.3s"></div>
-              </div>
-            </div>
-
-            <!-- 업데이트 발견 시 패널 -->
-            <div id="app-update-available" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);border-radius:10px;padding:12px;margin-top:8px">
-              <div style="font-size:14px;font-weight:700;color:#60a5fa;margin-bottom:4px">
-                🆕 APK 업데이트: <span id="app-update-from">-</span> → <span id="app-update-avail-version">-</span>
-              </div>
-              <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">
-                Android 네이티브 코드 + HTML 을 함께 최신으로 교체합니다
-              </div>
-              <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;border-bottom:1px solid #334155;padding-bottom:4px">📋 업데이트 내용</div>
-              <div id="app-update-avail-notes" style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px;max-height:160px;overflow-y:auto"></div>
-              <button class="btn-save" onclick="startAppDownload()" style="background:#22c55e;color:#052e16;font-weight:700">
-                📥 지금 업데이트
-              </button>
-              <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5">
-                💡 설치 실패 시 서명 불일치 가능성. 기존 앱 삭제 후 수동 설치 필요.
-              </div>
-            </div>
-
-            <!-- 설치 미완료 패널 -->
-            <div id="app-install-failed" style="display:none;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px;margin-top:8px">
-              <div style="font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:8px">
-                ⚠️ 업데이트가 완료되지 않았습니다
-              </div>
-              <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:10px">
-                설치가 <strong>취소</strong>되었거나 <strong>서명 불일치</strong>로 거부되었을 수 있습니다.
-              </div>
-              <div style="display:flex;gap:6px">
-                <button class="btn-save" style="flex:1;background:#60a5fa" onclick="checkAppUpdate()">🔄 다시 시도</button>
-                <button class="btn-save" style="flex:1;background:#ef4444;color:#fff" onclick="uninstallAndReinstall()">🗑️ 삭제 후 재설치</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 앱 정보 섹션 -->
-          <div class="settings-item app-row-col">
-            <div class="settings-group-title" style="margin:0 0 8px 0">앱 정보</div>
-            <div class="info-box" style="font-size:12px;line-height:1.9">
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">버전</span> <strong id="info-apk-ver" style="color:#f1f5f9">-</strong></div>
-              <div id="info-hotpatch-row" style="display:none;background:rgba(96,165,250,0.08);margin:4px -6px;padding:4px 8px;border-radius:6px;font-size:11px">
-                <span style="color:#60a5fa">ℹ 웹 리소스는 <span id="info-content-ver">-</span> 로 자동 갱신됨 (APK 업데이트 시 동기화)</span>
-              </div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">실행 환경</span> <span id="info-env" style="color:#cbd5e1">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Android</span> <span id="info-android" style="color:#cbd5e1">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">WebView</span> <span id="info-webview" style="color:#cbd5e1">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">프록시 캐시</span> <span id="info-proxy-cache" style="color:#cbd5e1">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">마지막 체크</span> <span id="info-last-check" style="color:#64748b;font-size:11px">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">Supabase</span> <span id="info-supabase" style="color:#cbd5e1;font-size:11px">-</span></div>
-              <div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">GitHub</span> <span id="info-github" style="color:#cbd5e1;font-size:11px">-</span></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 앱 로그 -->
-        <div class="settings-group">
-          <div class="settings-group-title">앱 로그</div>
-          <div class="settings-item">
-            <div class="settings-desc">
-              최근 이벤트·오류 기록 (최대 100건). 문제 발생 시 로그를 복사해 개발자에게 공유하세요.
-            </div>
-            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px" onclick="renderLogUI()">
-                🔄 새로고침
-              </button>
-              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px;background:#334155;color:#e2e8f0" onclick="copyLogs()">
-                📋 전체 복사
-              </button>
-              <button class="btn-save" style="flex:1;min-width:100px;padding:8px;font-size:13px;background:#475569;color:#e2e8f0" onclick="clearLogs()">
-                🗑️ 로그 지우기
-              </button>
-            </div>
-            <div id="app-log-count" style="font-size:11px;color:#64748b;margin-bottom:6px">-</div>
-            <div id="app-log-list" style="max-height:350px;overflow-y:auto;border-radius:8px;background:#0f172a;border:1px solid #334155;padding:4px"></div>
-          </div>
-        </div>
-
       </div>
+
     </section>
 
-  </div><!-- /main -->
+  </div>
 
-  <!-- ── Bottom Nav ──────────────────────────────────── -->
+  <!-- ─────────── Bottom Nav ─────────── -->
   <nav id="bottomnav">
-    <button class="nav-btn active" id="nav-home" onclick="showView('home')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <polyline points="9 22 9 12 15 12 15 22"/>
-      </svg>
-      행사목록
+    <button class="nav-btn active" data-view="home" data-title="행사 런처" onclick="showView('home')">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      행사
     </button>
-    <button class="nav-btn" id="nav-wifi" onclick="showView('wifi')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-        <rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="21"/>
-        <line x1="18" y1="14" x2="18" y2="17"/><line x1="14" y1="18" x2="18" y2="18"/>
-        <line x1="21" y1="18" x2="21" y2="21"/><line x1="18" y1="21" x2="21" y2="21"/>
-      </svg>
+    <button class="nav-btn" data-view="wifi" data-title="WiFi 네트워크" onclick="showView('wifi')">
+      <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      WiFi
+    </button>
+    <button class="nav-btn" data-view="qr" data-title="QR 코드 스캐너" onclick="showView('qr')">
+      <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2"/><path d="M17 3h2a2 2 0 012 2v2"/><path d="M21 17v2a2 2 0 01-2 2h-2"/><path d="M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       QR 스캔
     </button>
-    <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
+    <button class="nav-btn" data-view="settings" data-title="설정" onclick="showView('settings')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       설정
     </button>
   </nav>
+</div>
 
-</div><!-- /app -->
+<!-- ─────────── Modal: Room Picker (다중 룸) ─────────── -->
+<div class="modal-backdrop" id="m-room-picker">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div class="modal-title">룸 선택<small id="m-room-picker-sub">-</small></div>
+      <button class="modal-close" onclick="closeRoomPicker()">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="m-room-picker-body"></div>
+  </div>
+</div>
 
-<div class="save-toast" id="save-toast">✅ 설정이 저장되었습니다</div>
+<!-- ─────────── Modal: 기본 WiFi 비밀번호 변경 (보존) ─────────── -->
+<div class="pw-modal" id="default-pw-modal">
+  <div class="pw-modal-card">
+    <div class="pw-title">기본 WiFi 비밀번호</div>
+    <div class="pw-sub">
+      저장 시 스캔 목록에 <strong style="color:var(--accent)">원탭 연결</strong> 버튼이 표시되고,
+      비밀번호 모달에 자동 채움됩니다.
+    </div>
+    <input type="password" id="modal-default-pw-input" class="pw-input"
+      placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false">
+    <label class="pw-check-row">
+      <input type="checkbox" id="modal-default-pw-show" onchange="toggleModalDefaultPwVisible()">
+      비밀번호 표시
+    </label>
+    <div class="pw-btn-row">
+      <button class="pw-btn" onclick="closeDefaultPwModal()">취소</button>
+      <button class="pw-btn pw-btn-danger" onclick="resetDefaultPassword()">기본값</button>
+      <button class="pw-btn pw-btn-primary" onclick="saveDefaultPasswordFromModal()">저장</button>
+    </div>
+  </div>
+</div>
 
-<!-- hidden NoSleep video element (prevents screen sleep on Android 9) -->
+<!-- ─────────── Modal: WiFi 비밀번호 입력 (보존) ─────────── -->
+<div class="pw-modal" id="wifi-password-modal">
+  <div class="pw-modal-card">
+    <div class="pw-sub" style="margin-bottom:4px">연결할 네트워크</div>
+    <div class="pw-title" id="wifi-modal-ssid">-</div>
+    <div class="pw-sub" style="margin:var(--space-3) 0 6px">비밀번호</div>
+    <input type="password" id="wifi-modal-password" class="pw-input"
+      placeholder="WiFi 비밀번호" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="auto-fill-hint" id="auto-fill-hint">자주 쓰는 비밀번호가 자동 입력되었습니다</div>
+    <label class="pw-check-row">
+      <input type="checkbox" id="wifi-show-password" onchange="toggleWifiPasswordVisible()">
+      비밀번호 표시
+    </label>
+    <div class="pw-btn-row">
+      <button class="pw-btn" onclick="closeWifiPasswordModal()">취소</button>
+      <button class="pw-btn pw-btn-primary" onclick="submitWifiPassword()">연결</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── Toast ─────────── -->
+<div class="save-toast" id="save-toast">설정이 저장되었습니다</div>
+
+<!-- ─────────── NoSleep video (보존 — 화면 절전 방지) ─────────── -->
 <video id="nosleep-video" playsinline muted loop
   style="position:fixed;top:-2px;left:-2px;width:2px;height:2px;opacity:0.01;pointer-events:none"
   src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MAAAAG1vb3YAAABsbXZoZAAAAADaBlwX2gZcFwAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIVdHJhawAAAFx0a2hkAAAAA9oGXBfaBlwXAAAAAQAAAAAAAAPoAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAABAAAAIAAAAAABpGVkdHMAAAAcZWxzdAAAAAAAAAABAAAA6AAAAAAAAQAAAAABnG1kaWEAAAAgbWRoZAAAAADaBlwX2gZcFwAAQAAAAAAAAAAAACxoZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAChdtaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAHXc3RibAAAALNzdHNkAAAAAAAAAAEAAACjYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAEAAIAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//wAAABVhdmNDAWQAC//hABdAZAALp9AhoC0AAAAAEAAAAgAAADwPGDGWAQAFaOvssiwAAAAYc3R0cwAAAAAAAAABAAAABAAAAAAAAAAAABBzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAEAAAAAQAAADRzdHN6AAAAAAAAAAAAAAAEAAADDAAAABcAAAAXAAAAFwAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ni40MC4xMDE=">
@@ -1013,23 +1179,19 @@
 'use strict';
 
 /* ═══════════════════════════════════════════════════════
-   CONFIG (하드코딩 - 변경 불필요)
+   CONFIG (보존)
 ═══════════════════════════════════════════════════════ */
-var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';   // Fallback only
+var SUPABASE_URL = 'https://bpxqnfwuvhlaottcnpie.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHFuZnd1dmhsYW90dGNucGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2OTYxMzMsImV4cCI6MjA4MzI3MjEzM30.F6pA27vkaAJFjK54vkYPbOI7K1LE2tQFVaPG-bA8r3c';
-var BASE_URL = 'https://sympopad.com';                            // 참석자/운영자 링크 기본 주소
-var PROXY_URL = 'https://sympotalklauncher-apk.pages.dev';         // Cloudflare Pages Functions 프록시
-var GITHUB_REPO = 'sympotalk/SympotalkLauncher-APK';               // 앱 릴리즈/업데이트 소스
-// 자동 갱신 제거됨 (v1.0.31+) — 사용자가 새로고침 버튼으로만 갱신
+var BASE_URL = 'https://sympopad.com';
+var PROXY_URL = 'https://sympotalklauncher-apk.pages.dev';
+var GITHUB_REPO = 'sympotalk/SympotalkLauncher-APK';
 
 // Android APK 에서 주입되는 Native 브릿지 (JS Interface)
 var hasNativeBridge = (typeof AndroidBridge !== 'undefined');
 
 /* ═══════════════════════════════════════════════════════
-   SYMPOTALK LOG — 로컬 저장 + 사용자 친화적 설명
-   - localStorage 기반 rolling (최대 100건)
-   - 100 × ~200B ≈ 20KB 로 저장 부하 미미
-   - 기술 에러 메시지를 자동으로 이해 가능한 한국어 설명으로 번역
+   SYMPOTALK LOG — 로컬 저장 + 사용자 친화적 설명 (보존)
 ═══════════════════════════════════════════════════════ */
 var SympotalkLog = {
   MAX: 100,
@@ -1040,13 +1202,13 @@ var SympotalkLog = {
       var logs = this.read();
       logs.push({
         ts: Date.now(),
-        lv: level,                                  // 'error'|'warn'|'info'|'success'
-        msg: String(msg || '').slice(0, 500),       // 원본 메시지 (최대 500자)
-        exp: explanation || this.autoExplain(msg)   // 친화적 설명
+        lv: level,
+        msg: String(msg || '').slice(0, 500),
+        exp: explanation || this.autoExplain(msg)
       });
       if (logs.length > this.MAX) logs = logs.slice(-this.MAX);
       localStorage.setItem(this.KEY, JSON.stringify(logs));
-    } catch(e) { /* localStorage quota 등 실패 시 조용히 무시 */ }
+    } catch(e) {}
   },
 
   read: function() {
@@ -1060,7 +1222,6 @@ var SympotalkLog = {
     try { localStorage.removeItem(this.KEY); } catch(e) {}
   },
 
-  /** 기술적 에러 메시지를 사용자가 이해할 수 있는 문장으로 변환 */
   autoExplain: function(msg) {
     if (!msg) return null;
     var m = String(msg).toLowerCase();
@@ -1104,7 +1265,7 @@ var SympotalkLog = {
     if (m.indexOf('freeze') !== -1 && m.indexOf('page') !== -1) {
       return '시스템이 메모리 확보를 위해 앱을 정지시켰습니다.';
     }
-    return null;  // 모르는 패턴은 설명 없이 원본만 표시
+    return null;
   }
 };
 
@@ -1120,17 +1281,10 @@ window.addEventListener('unhandledrejection', function(e) {
 });
 
 /* ═══════════════════════════════════════════════════════
-   비정상 종료 감지 — 세션 하트비트 + 종료 이벤트 기록
-   ─────────────────────────────────────────────────────
-   원리:
-   1) 앱 시작 시 세션 플래그를 세운다 (timestamp 포함)
-   2) 정상 종료(pagehide/beforeunload) 시 플래그를 내린다
-   3) 다음 시작 시 플래그가 남아 있으면 → 이전 세션이 비정상 종료
-   4) pagehide·freeze·메모리 부족 등 종료 직전 이벤트도 기록
+   비정상 종료 감지 — 세션 하트비트 (보존)
 ═══════════════════════════════════════════════════════ */
 var SESSION_KEY = 'sympotalk_session';
 
-/** 이전 세션 비정상 종료 여부 확인 (앱 시작 시 호출) */
 function checkPreviousSession() {
   try {
     var prev = localStorage.getItem(SESSION_KEY);
@@ -1149,7 +1303,6 @@ function checkPreviousSession() {
   } catch(e) {}
 }
 
-/** 세션 시작 (플래그 세우기) */
 function startSession() {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -1161,7 +1314,6 @@ function startSession() {
   } catch(e) {}
 }
 
-/** 세션 하트비트 갱신 — 마지막 활동 시각 업데이트 */
 function updateSessionBeat(eventName) {
   try {
     var raw = localStorage.getItem(SESSION_KEY);
@@ -1174,14 +1326,12 @@ function updateSessionBeat(eventName) {
   } catch(e) {}
 }
 
-/** 세션 정상 종료 (플래그 내리기) */
 function endSession() {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ active: false, ts: Date.now() }));
   } catch(e) {}
 }
 
-// 정상 종료 이벤트 감지
 window.addEventListener('pagehide', function(e) {
   var reason = e.persisted ? 'pagehide (bfcache)' : 'pagehide (종료)';
   SympotalkLog.push('info', reason, '앱 화면이 닫혔습니다.');
@@ -1193,7 +1343,6 @@ window.addEventListener('beforeunload', function() {
   endSession();
 });
 
-// 페이지 라이프사이클: freeze (시스템이 메모리 회수 직전에 발생)
 if ('onfreeze' in document) {
   document.addEventListener('freeze', function() {
     SympotalkLog.push('warn', 'Page Freeze — 시스템이 앱을 일시 정지',
@@ -1207,7 +1356,6 @@ if ('onfreeze' in document) {
   });
 }
 
-// 가시성 변화 추적 (백그라운드 전환 시 기록)
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'hidden') {
     updateSessionBeat('visibility:hidden');
@@ -1222,28 +1370,24 @@ document.addEventListener('visibilitychange', function() {
 var state = {
   currentView: 'home',
   prevView: null,
-  currentEvent: null,
+  currentEvent: null,        // 마지막 클릭 행사 추적용 (view 전환 미사용)
   browserUrl: null,
   scannerStream: null,
   scannerRAF: null,
-  wakeLock: null,
-  // refreshTimer 제거됨 (v1.0.31+)
+  wakeLock: null
 };
 
-/* ═══════════════════════════════════════════════════════
-   WIFI MANAGEMENT (Android Bridge)
-   - APK: 앱 내부에서 주변 WiFi 스캔 + 비밀번호 입력 후 연결 가능
-   - 웹: 시스템 설정 안내만 표시
-═══════════════════════════════════════════════════════ */
+// 행사 + 룸 캐시 (segmented 토글 시 룸 재요청 방지)
+var eventsCache = { ongoing: [], ended: [] };
+var roomsCache = {};   // event_id → rooms[]
 
-var pendingWifi = null;      // {ssid, security} 비밀번호 입력 대기 중인 네트워크
+/* ═══════════════════════════════════════════════════════
+   WIFI MANAGEMENT (Android Bridge) — 보존
+═══════════════════════════════════════════════════════ */
+var pendingWifi = null;
 var wifiRefreshTimer = null;
 
-/* ── 자주 쓰는 WiFi 비밀번호 (localStorage + 하드코딩 기본값) ──
- * NOTE: 키오스크 전용 단말 기준 평문 저장. 공용/분실 위험 단말에는 사용 금지.
- * 기본값은 앱 재설치·업데이트·localStorage 초기화 후에도 유지됨.
- */
-var DEFAULT_WIFI_PASSWORD = 'a01044447995';   // 회사 기본 WiFi 비밀번호
+var DEFAULT_WIFI_PASSWORD = 'a01044447995';
 
 function getDefaultWifiPassword() {
   try {
@@ -1252,7 +1396,6 @@ function getDefaultWifiPassword() {
   } catch(e) { return DEFAULT_WIFI_PASSWORD; }
 }
 
-/* ── 기본 비밀번호 변경 모달 ── */
 function openDefaultPwModal() {
   var input = document.getElementById('modal-default-pw-input');
   input.value = getDefaultWifiPassword();
@@ -1288,7 +1431,7 @@ function resetDefaultPassword() {
     closeDefaultPwModal();
   }
 }
-/* 스캔 결과 캐시 (저장 비밀번호 변경 시 UI 즉시 갱신) */
+
 var cachedScanResults = null;
 
 function openWifiSettings() {
@@ -1303,20 +1446,17 @@ function updateCurrentWifi() {
   if (!el) return;
 
   if (!hasNativeBridge) {
-    el.innerHTML = '🌐 웹 브라우저 환경<br><span style="font-size:11px;color:#94a3b8;font-weight:400">WiFi 스캔은 APK 설치 후 사용 가능</span>';
-    el.style.color = '#64748b';
+    el.textContent = '웹 브라우저 환경 — WiFi 스캔은 APK 필요';
     return;
   }
   if (typeof AndroidBridge.getCurrentSSID !== 'function') {
-    el.innerHTML = '⚠️ 이전 버전 APK<br><span style="font-size:11px;color:#fbbf24;font-weight:400">WiFi 스캔이 추가된 새 APK 설치 필요 (v1.0.7+)</span>';
-    el.style.color = '#fbbf24';
+    el.textContent = '이전 버전 APK — v1.0.7+ 필요';
     return;
   }
 
   var ssid = '';
   try { ssid = AndroidBridge.getCurrentSSID(); } catch(e) {}
 
-  // SSID 가 비었으면 위치 권한/서비스 체크 (Android 8.1+ 필수)
   if (!ssid) {
     var hasLoc = true;
     try {
@@ -1325,20 +1465,16 @@ function updateCurrentWifi() {
       }
     } catch(e) {}
     if (!hasLoc) {
-      el.innerHTML = '⚠️ WiFi 이름을 보려면 <strong>위치 권한</strong>이 필요합니다<br>' +
-        '<button class="btn-save" style="margin-top:6px;padding:6px 12px;width:auto;font-size:12px;background:#60a5fa" ' +
-        'onclick="requestLocationPermission()">권한 허용</button>';
-      el.style.color = '#fbbf24';
+      el.innerHTML = 'WiFi 이름을 보려면 위치 권한이 필요합니다 ' +
+        '<button class="btn-line" style="margin-left:8px;padding:4px 10px;font-size:11px" onclick="requestLocationPermission()">권한 허용</button>';
     } else {
-      el.innerHTML = '(연결된 WiFi 없음)<br><span style="font-size:11px;color:#94a3b8;font-weight:400">' +
-        'WiFi 연결 후에도 이름이 안 보이면 위치 서비스가 꺼져 있는지 확인하세요</span>';
-      el.style.color = '#64748b';
+      el.textContent = '(연결된 WiFi 없음) — 위치 서비스가 꺼져 있는지 확인';
     }
     return;
   }
 
-  el.textContent = '✅ ' + ssid;
-  el.style.color = '#22c55e';
+  el.textContent = '연결됨: ' + ssid;
+  el.style.color = 'var(--accent)';
 }
 
 function requestLocationPermission() {
@@ -1352,27 +1488,27 @@ function refreshWifiList() {
   var listEl = document.getElementById('wifi-list');
 
   if (!hasNativeBridge) {
-    statusEl.innerHTML = '⚠️ 웹 브라우저에서는 WiFi 스캔 불가. <strong>APK 설치 필요</strong>';
+    statusEl.textContent = '웹 브라우저에서는 WiFi 스캔 불가 — APK 설치 필요';
     return;
   }
   if (typeof AndroidBridge.startWifiScan !== 'function') {
-    statusEl.innerHTML = '⚠️ 이전 APK 버전입니다. <strong>GitHub Actions에서 v1.0.7+ APK 다운로드 후 재설치</strong>';
+    statusEl.textContent = '이전 APK 버전 — v1.0.7+ APK 다운로드 후 재설치';
     return;
   }
 
   if (!AndroidBridge.isWifiEnabled()) {
-    statusEl.innerHTML = '⚠️ WiFi가 꺼져 있습니다. <a href="#" onclick="openWifiSettings();return false" style="color:#60a5fa">시스템 설정</a>에서 켜주세요.';
+    statusEl.innerHTML = 'WiFi가 꺼져 있습니다. ' +
+      '<a href="#" onclick="openWifiSettings();return false" style="color:var(--accent)">시스템 설정</a>에서 켜주세요.';
     return;
   }
 
-  statusEl.textContent = '🔍 주변 WiFi 검색 중...';
-  listEl.style.display = 'none';
+  statusEl.textContent = '주변 WiFi 검색 중...';
+  listEl.innerHTML = '';
   try { AndroidBridge.startWifiScan(); } catch(e) {
     statusEl.textContent = '스캔 실패: ' + e.message;
   }
 }
 
-// Native → JS 콜백 (WebView.evaluateJavascript 로 호출됨)
 window.onWifiScanResult = function(jsonArrayOrString) {
   var networks;
   try {
@@ -1394,7 +1530,7 @@ function renderWifiList(networks) {
 
   if (!networks || networks.length === 0) {
     statusEl.textContent = '주변 WiFi를 찾을 수 없습니다';
-    listEl.style.display = 'none';
+    listEl.innerHTML = '';
     return;
   }
 
@@ -1402,44 +1538,46 @@ function renderWifiList(networks) {
   var hasDefaultPw = !!defaultPw;
 
   statusEl.textContent = networks.length + '개 네트워크 발견' +
-    (hasDefaultPw ? ' · ⚡ 원탭 연결 가능' : '');
+    (hasDefaultPw ? ' · 원탭 연결 가능' : '');
+
+  // 현재 연결된 SSID 식별
+  var currentSsid = '';
+  if (hasNativeBridge && typeof AndroidBridge.getCurrentSSID === 'function') {
+    try { currentSsid = AndroidBridge.getCurrentSSID() || ''; } catch(e) {}
+  }
 
   var html = '';
   for (var i = 0; i < networks.length; i++) {
     var n = networks[i];
-    var bars = n.signalBars || 0;
     var isSecure = n.security && n.security !== 'NONE';
-    var signalIcon = '';
-    for (var b = 0; b < 4; b++) {
-      signalIcon += '<span style="display:inline-block;width:3px;height:' + ((b+1)*3) + 'px;background:' + (b < bars ? '#60a5fa' : '#334155') + ';margin-right:1px;vertical-align:bottom;border-radius:1px"></span>';
-    }
-
-    // HTML 속성 내 JSON 인라인 — escAttr 이 &/"/' 모두 처리
+    var isConnected = currentSsid && n.ssid === currentSsid;
     var netJson = escAttr(n);
-    // 네트워크 행 (탭 시 비밀번호 모달)
-    html += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
-      '<button class="link-btn" style="flex:1;margin:0" onclick="selectWifi(' + netJson + ')">' +
-        '<div style="display:flex;align-items:center;gap:10px;width:100%">' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(n.ssid) + '</div>' +
-            '<div style="font-size:11px;color:#64748b;margin-top:2px">' + n.security + (isSecure ? ' 🔒' : ' 🔓') + ' · ' + n.level + ' dBm</div>' +
-          '</div>' +
-          '<div style="flex-shrink:0">' + signalIcon + '</div>' +
-        '</div>' +
-      '</button>';
+    var connClass = isConnected ? ' connected' : '';
 
-    // 원탭 연결 버튼 (기본 비밀번호 저장됐고 WPA/WEP 보안인 경우)
-    if (hasDefaultPw && isSecure) {
-      html += '<button class="btn-save" style="width:auto;padding:10px 12px;margin:0;background:#22c55e;color:#052e16;font-size:13px;font-weight:700" title="자주 쓰는 비밀번호로 즉시 연결" ' +
-        'onclick="quickConnectWifi(' + netJson + ')">⚡</button>';
+    html += '<div class="wifi-item' + connClass + '">' +
+      '<svg class="wifi-icon" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>' +
+      '<div class="wifi-info">' +
+        '<div class="wifi-ssid">' + escHtml(n.ssid) + '</div>' +
+        '<div class="wifi-meta">' +
+          '<span class="wifi-meta-item">' + (isSecure ? n.security : '개방') + '</span>' +
+          '<span class="wifi-meta-item">' + n.level + ' dBm</span>' +
+        '</div>' +
+      '</div>';
+
+    if (isConnected) {
+      html += '<span class="wifi-badge-connected">연결됨</span>';
+    } else if (hasDefaultPw && isSecure) {
+      // 원탭 연결 우선
+      html += '<button class="wifi-action" onclick="quickConnectWifi(' + netJson + ')" title="기본 비밀번호로 즉시 연결">⚡ 즉시</button>';
+      html += '<button class="wifi-action" style="margin-left:6px" onclick="selectWifi(' + netJson + ')">연결</button>';
+    } else {
+      html += '<button class="wifi-action" onclick="selectWifi(' + netJson + ')">연결</button>';
     }
     html += '</div>';
   }
   listEl.innerHTML = html;
-  listEl.style.display = 'block';
 }
 
-// 원탭 연결: 저장된 비밀번호로 바로 시도
 function quickConnectWifi(network) {
   var pw = getDefaultWifiPassword();
   if (!pw) {
@@ -1450,11 +1588,10 @@ function quickConnectWifi(network) {
   connectWifiNow(network.ssid, pw, network.security);
 }
 
-// Android 9 는 WPA3 SAE 미지원 → 조기 경고
 function checkWpa3Support(network) {
   var sec = (network.security || '').toUpperCase();
   var caps = (network.capabilities || '').toUpperCase();
-  var isPureWpa3 = sec === 'WPA3' && !caps.includes('WPA2') && !caps.includes('RSN');
+  var isPureWpa3 = sec === 'WPA3' && caps.indexOf('WPA2') === -1 && caps.indexOf('RSN') === -1;
   if (isPureWpa3) {
     alert('이 기기는 WPA3 전용 네트워크를 지원하지 않습니다.\n(LG G Pad 5 / Android 9)\n시스템 WiFi 설정에서 연결을 시도해보세요.');
     return false;
@@ -1464,7 +1601,7 @@ function checkWpa3Support(network) {
 
 window.onWifiScanError = function(msg) {
   var statusEl = document.getElementById('wifi-scan-status');
-  if (statusEl) statusEl.textContent = '❌ ' + msg;
+  if (statusEl) statusEl.textContent = msg;
 };
 
 window.onWifiConnectResult = function(success, msg) {
@@ -1472,75 +1609,52 @@ window.onWifiConnectResult = function(success, msg) {
   var statusEl = document.getElementById('wifi-scan-status');
   closeWifiPasswordModal();
 
-  // 구조화된 메시지 파싱 (Android 10+ WifiNetworkSuggestion / Android 9 legacy)
   var parts = (msg || '').split('|');
   var code = parts[0] || '';
   var ssid = parts[1] || '';
   var extra = parts[2] || '';
 
-  var settingsBtn = '<button class="btn-save" style="margin-top:6px;background:#60a5fa;color:#fff;padding:6px 12px;width:auto;font-size:12px" onclick="openWifiSettings()">⚙️ 시스템 WiFi 설정</button>';
-
-  // Android 10+ 성공 케이스 (알림 승인 대기)
   if (success && code === 'WIFI_SUGGEST_OK') {
-    if (statusEl) statusEl.innerHTML =
-      '✅ <strong>' + escHtml(ssid) + '</strong> 제안됨<br>' +
-      '<span style="font-size:12px;color:#cbd5e1">상단 알림바의 [연결] 을 탭하세요 (최초 1회)</span><br>' +
-      settingsBtn;
+    if (statusEl) statusEl.innerHTML = escHtml(ssid) + ' 제안됨 — 상단 알림바의 [연결] 을 탭하세요';
     showToast('WiFi 제안됨 — 알림 확인');
-    // Android 10+ 는 사용자 승인에 시간 필요 → 지연 연장 (15s, 30s)
     setTimeout(updateCurrentWifi, 15000);
     setTimeout(updateCurrentWifi, 30000);
     return;
   }
-  // Android 10+ 이미 등록된 경우
   if (success && code === 'WIFI_SUGGEST_DUPE') {
-    if (statusEl) statusEl.innerHTML =
-      'ℹ️ <strong>' + escHtml(ssid) + '</strong> 는 이미 등록돼 있습니다<br>' +
-      '<span style="font-size:12px;color:#cbd5e1">범위 안에 있으면 자동 연결됩니다</span><br>' +
-      settingsBtn;
+    if (statusEl) statusEl.innerHTML = escHtml(ssid) + ' 는 이미 등록돼 있습니다 — 범위 안에 있으면 자동 연결';
     setTimeout(updateCurrentWifi, 3000);
     setTimeout(updateCurrentWifi, 10000);
     return;
   }
-  // Android 9 직접 연결 성공 (기존 경로)
   if (success) {
     showToast(msg || 'WiFi 연결 시도 중');
-    if (statusEl) statusEl.textContent = '✅ ' + (msg || '연결됨');
+    if (statusEl) statusEl.textContent = msg || '연결됨';
     setTimeout(updateCurrentWifi, 2000);
     setTimeout(updateCurrentWifi, 5000);
     setTimeout(refreshWifiList, 6000);
     return;
   }
 
-  // 실패 케이스들
   if (code === 'WIFI_SUGGEST_DENIED') {
-    if (statusEl) statusEl.innerHTML =
-      '❌ 앱에 WiFi 추천 권한이 없습니다<br>' +
-      '<span style="font-size:12px;color:#cbd5e1">시스템 설정에서 WiFi 에 직접 연결해주세요</span><br>' +
-      settingsBtn;
+    if (statusEl) statusEl.innerHTML = '앱에 WiFi 추천 권한이 없습니다 — 시스템 설정에서 연결';
     return;
   }
   if (code === 'WIFI_SUGGEST_FAIL') {
-    if (statusEl) statusEl.innerHTML =
-      '❌ WiFi 제안 실패 (코드 ' + escHtml(extra) + ')<br>' + settingsBtn;
+    if (statusEl) statusEl.innerHTML = 'WiFi 제안 실패 (코드 ' + escHtml(extra) + ')';
     return;
   }
   if (code === 'SYSTEM_PROFILE_EXISTS') {
-    if (statusEl) statusEl.innerHTML =
-      '⚠️ "<strong>' + escHtml(ssid) + '</strong>"가 이미 시스템에 저장되어 있습니다<br>' +
-      '<span style="font-size:12px;color:#cbd5e1">시스템 설정에서 해당 WiFi "잊기" 후 재시도</span><br>' +
-      settingsBtn;
+    if (statusEl) statusEl.innerHTML = escHtml(ssid) + ' 가 이미 시스템에 저장됨 — 시스템 설정에서 "잊기" 후 재시도';
     return;
   }
-  // 기타 일반 실패
-  if (statusEl) statusEl.innerHTML = '❌ ' + escHtml(msg || '연결 실패') + '<br>' + settingsBtn;
+  if (statusEl) statusEl.textContent = msg || '연결 실패';
 };
 
 function selectWifi(network) {
   pendingWifi = network;
   var security = network.security || 'NONE';
 
-  // 보안 없는 open 네트워크는 바로 연결
   if (security === 'NONE') {
     if (confirm('"' + network.ssid + '" 네트워크에 연결하시겠습니까? (비밀번호 없음)')) {
       connectWifiNow(network.ssid, '', 'NONE');
@@ -1548,25 +1662,21 @@ function selectWifi(network) {
     return;
   }
 
-  // WPA3 전용 네트워크 조기 차단
   if (!checkWpa3Support(network)) return;
 
-  // 비밀번호 모달 표시 (가상키보드 자동 활성화 방지 — 사용자가 입력칸을 탭해야 키보드 출현)
   document.getElementById('wifi-modal-ssid').textContent = network.ssid;
   var defaultPw = getDefaultWifiPassword();
   var pwInput = document.getElementById('wifi-modal-password');
   pwInput.value = defaultPw || '';
   pwInput.type = 'password';
-  pwInput.blur();          // 혹시 이전 포커스가 남아있으면 해제
+  pwInput.blur();
   document.getElementById('wifi-show-password').checked = false;
   document.getElementById('auto-fill-hint').style.display = defaultPw ? 'block' : 'none';
   document.getElementById('wifi-password-modal').style.display = 'flex';
-  // focus() / select() 호출하지 않음 — 키보드는 입력칸 탭 시에만 표시
 }
 
 function closeWifiPasswordModal() {
   document.getElementById('wifi-password-modal').style.display = 'none';
-  // 비밀번호 필드 초기화 (다음 오픈 시 남지 않도록)
   var pwInput = document.getElementById('wifi-modal-password');
   if (pwInput) pwInput.value = '';
   pendingWifi = null;
@@ -1590,28 +1700,24 @@ function submitWifiPassword() {
 
 function connectWifiNow(ssid, password, security) {
   var statusEl = document.getElementById('wifi-scan-status');
-  statusEl.textContent = '🔐 ' + ssid + ' 연결 시도 중...';
+  if (statusEl) statusEl.textContent = ssid + ' 연결 시도 중...';
   try {
     AndroidBridge.connectWifi(ssid, password, security || 'WPA');
   } catch(e) {
-    statusEl.textContent = '연결 실패: ' + e.message;
+    if (statusEl) statusEl.textContent = '연결 실패: ' + e.message;
   }
 }
 
 /* ═══════════════════════════════════════════════════════
-   NAVIGATION
+   NAVIGATION — 4-tab 전환 (재작성)
 ═══════════════════════════════════════════════════════ */
 function showView(name) {
   if (name === state.currentView) return;
 
-  // QR 스캐너 중지
-  if (state.currentView === 'wifi') stopQRScan();
+  // QR 뷰에서 이탈하는 경우 카메라 정지
+  if (state.currentView === 'qr' && name !== 'qr') stopScanner();
 
-  // 이전 뷰 기록 (detail 전용 back 버튼)
-  if (name === 'detail') {
-    state.prevView = state.currentView;
-  }
-
+  state.prevView = state.currentView;
   state.currentView = name;
 
   // 모든 뷰 숨기기
@@ -1619,54 +1725,54 @@ function showView(name) {
   for (var i = 0; i < views.length; i++) {
     views[i].classList.remove('active');
   }
-  document.getElementById('view-' + name).classList.add('active');
+  var targetView = document.getElementById('view-' + name);
+  if (targetView) targetView.classList.add('active');
 
-  // 바텀 네비 업데이트
-  var navBtns = document.querySelectorAll('.nav-btn');
-  for (var j = 0; j < navBtns.length; j++) {
-    navBtns[j].classList.remove('active');
-  }
-  var mainViews = ['home', 'wifi', 'settings'];
-  if (mainViews.indexOf(name) !== -1) {
-    document.getElementById('nav-' + name).classList.add('active');
-  }
-
-  // 뒤로가기 버튼 표시 (detail, browser)
-  var backBtn = document.getElementById('topbar-back');
-  if (name === 'detail' || name === 'browser') {
-    backBtn.classList.add('visible');
-  } else {
-    backBtn.classList.remove('visible');
+  // 바텀 네비 활성화 + 타이틀 갱신
+  var navs = document.querySelectorAll('.nav-btn');
+  for (var j = 0; j < navs.length; j++) navs[j].classList.remove('active');
+  var titleEl = document.getElementById('tb-title');
+  for (var k = 0; k < navs.length; k++) {
+    if (navs[k].getAttribute('data-view') === name) {
+      navs[k].classList.add('active');
+      var t = navs[k].getAttribute('data-title');
+      if (titleEl && t) titleEl.textContent = t;
+      break;
+    }
   }
 
-  // 상단 타이틀 업데이트
-  var titleEl = document.getElementById('topbar-title');
-  var titles = { home: '행사 런처', wifi: 'QR 스캔', settings: '설정', detail: '행사 상세', browser: '' };
-  titleEl.textContent = titles[name] || '';
+  // 스크롤 상단으로
+  if (targetView && targetView.scrollTo) targetView.scrollTo(0, 0);
 
-  // 설정 탭 진입 시 현재 WiFi 상태 + 앱 버전 갱신
+  // QR 뷰 진입 시 자동 시작
+  if (name === 'qr') {
+    setTimeout(startScanner, 150);
+  }
+
+  // 설정 뷰 진입 시 정보 갱신
   if (name === 'settings') {
-    updateCurrentWifi();
     updateCurrentAppVersion();
     loadAppInfo();
     renderLogUI();
   }
-  // QR 탭 진입 시 자동으로 카메라 시작
+
+  // WiFi 뷰 진입 시 현재 WiFi 갱신
   if (name === 'wifi') {
-    setTimeout(startQRScan, 150);   // 뷰 전환 애니메이션 직후
+    updateCurrentWifi();
   }
 }
 
 function handleBack() {
-  if (state.currentView === 'detail') {
-    showView(state.prevView || 'home');
+  // home 외 어디서든 home 으로 (4-tab 모델)
+  if (state.currentView !== 'home') {
+    showView('home');
     return;
   }
-  showView('home');
+  // home 에서는 native 가 처리 (앱 종료)
 }
 
 /* ═══════════════════════════════════════════════════════
-   SUPABASE REST API
+   SUPABASE REST API (보존)
 ═══════════════════════════════════════════════════════ */
 function supaFetch(path, params) {
   var url = SUPABASE_URL + '/rest/v1/' + path;
@@ -1689,10 +1795,6 @@ function supaFetch(path, params) {
   }).then(function(r) { return r.json(); });
 }
 
-/**
- * Supabase RPC 호출 (POST /rest/v1/rpc/{fn_name})
- * 담당자 이름 조회처럼 RLS 우회 필요한 공개 함수에 사용
- */
 function supaRpc(fnName, payload) {
   return fetch(SUPABASE_URL + '/rest/v1/rpc/' + fnName, {
     method: 'POST',
@@ -1707,10 +1809,6 @@ function supaRpc(fnName, payload) {
   }).then(function(r) { return r.json(); });
 }
 
-/**
- * Cloudflare 프록시를 먼저 시도하고 실패하면 Supabase 직접 호출 (fallback)
- * — 300~500대 동시 접속 시 Supabase 부하 제거. 엣지 캐시 15초.
- */
 function proxyFetch(endpoint, fallbackFn) {
   var proxyUrl = PROXY_URL + endpoint;
   return fetch(proxyUrl, {
@@ -1720,7 +1818,6 @@ function proxyFetch(endpoint, fallbackFn) {
     if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
     return r.json();
   }).then(function(data) {
-    // 프록시가 200 + 비정상 응답(에러 객체 등) 을 반환한 경우 스키마 검증
     if (!Array.isArray(data)) {
       throw new Error('Proxy returned non-array: ' + JSON.stringify(data).slice(0, 100));
     }
@@ -1732,41 +1829,35 @@ function proxyFetch(endpoint, fallbackFn) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   EVENT LIST
+   EVENT LIST (loadEvents 보존, renderEventList 재작성)
 ═══════════════════════════════════════════════════════ */
 function loadEvents() {
-  var container = document.getElementById('event-list-container');
-  var spinner = document.getElementById('refresh-spinner');
-  spinner.style.display = 'inline-block';
-  container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
+  var ongoingPane = document.getElementById('pane-ongoing');
+  var endedPane = document.getElementById('pane-ended');
+  ongoingPane.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
+  endedPane.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>불러오는 중...</span></div>';
 
-  // 프록시 먼저 시도 → 실패 시 Supabase RPC 직접 (fallback)
-  // RPC 는 담당자 이름(display_name) 까지 포함해서 반환
   proxyFetch('/api/events', function() {
     return supaRpc('pad_get_active_events');
   }).then(function(events) {
-    spinner.style.display = 'none';
-    renderEventList(events);
     showNetworkBanner(false);
     SympotalkLog.push('success', '행사 ' + (events ? events.length : 0) + '건 로드', '행사 목록이 정상적으로 갱신됐습니다.');
-    var now = new Date();
-    document.getElementById('last-refresh').textContent =
-      '마지막 갱신: ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
+    renderEventList(events || []);
   }).catch(function(err) {
-    spinner.style.display = 'none';
     var msg = err.message || '';
     var isNetworkError = isNetworkFailure(msg);
     SympotalkLog.push('error', '행사 목록 로드 실패: ' + msg);
     if (isNetworkError) {
       showNetworkBanner(true, '서버에 연결할 수 없습니다. WiFi 상태를 확인해주세요.');
-      container.innerHTML = '<div class="empty-msg"><div class="icon">📶</div><div style="line-height:1.6">인터넷 연결이 필요합니다<br><small style="color:#64748b">상단 WiFi 버튼 탭 → 연결 후 새로고침</small></div></div>';
+      ongoingPane.innerHTML = '<div class="empty-msg"><div class="icon">📶</div><div>인터넷 연결이 필요합니다<small>WiFi 탭 → 연결 후 새로고침</small></div></div>';
+      endedPane.innerHTML = '';
     } else {
-      container.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>불러오기 실패<br><small>' + escHtml(msg) + '</small></div></div>';
+      ongoingPane.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>불러오기 실패<small>' + escHtml(msg) + '</small></div></div>';
+      endedPane.innerHTML = '';
     }
   });
 }
 
-// 네트워크 에러 감지 (DNS/오프라인/timeout)
 function isNetworkFailure(msg) {
   if (!msg) return true;
   var m = msg.toLowerCase();
@@ -1791,23 +1882,21 @@ function showNetworkBanner(show, msg) {
 }
 
 function getEventStatusInfo(event) {
-  // Supabase admin 과 동일하게 status 컬럼을 단일 진실로 사용
-  // (관리자가 admin 에서 draft/active/closed 로 수동 관리하므로 앱도 이를 따름)
+  // status 컬럼 → ongoing(active), upcoming(draft/scheduled), ended(closed/completed)
   var status = (event.status || '').toLowerCase();
   switch (status) {
     case 'active':
-      return { label: '진행중', cls: 'status-active' };
+      return { kind: 'live', label: '진행중', dotStatus: 'live' };
     case 'closed':
     case 'ended':
     case 'completed':
-      return { label: '종료', cls: 'status-ended' };
+      return { kind: 'ended', label: '종료', dotStatus: 'ended' };
     case 'draft':
     case 'scheduled':
     case 'upcoming':
-      return { label: '예정', cls: 'status-upcoming' };
+      return { kind: 'upcoming', label: '예정', dotStatus: 'upcoming' };
     default:
-      // 알 수 없는 상태값(영문)을 그대로 노출하지 않고 통일된 label
-      return { label: '기타', cls: 'status-other' };
+      return { kind: 'upcoming', label: '기타', dotStatus: 'upcoming' };
   }
 }
 
@@ -1816,50 +1905,12 @@ function formatDateRange(start, end) {
   var s = start.replace(/-/g, '.');
   if (!end || end === start) return s;
   var e = end.replace(/-/g, '.');
-  // 같은 달이면 일만 표시
   if (start.substring(0, 7) === end.substring(0, 7)) {
     return s + ' ~ ' + end.split('-')[2];
   }
   return s + ' ~ ' + e;
 }
 
-function renderEventList(events) {
-  var container = document.getElementById('event-list-container');
-  if (!events || events.length === 0) {
-    container.innerHTML = '<div class="empty-msg"><div class="icon">📋</div><div>예정된 행사가 없습니다</div></div>';
-    return;
-  }
-
-  var html = '<div class="card">';
-  for (var i = 0; i < events.length; i++) {
-    var ev = events[i];
-    var statusInfo = getEventStatusInfo(ev);
-    var dateStr = formatDateRange(ev.start_date, ev.end_date);
-    var updatedStr = formatRelativeTime(ev.updated_at);
-    html += '<div class="event-card" onclick="openEventDetail(' + escAttr(ev) + ')">' +
-      // 좌측: 행사명 + 수정시각
-      '<div class="event-name-col">' +
-        '<div class="event-name">' + escHtml(ev.name) + '</div>' +
-        (updatedStr ? '<div class="event-updated">🕐 수정 ' + updatedStr + '</div>' : '') +
-      '</div>' +
-      // 우측: 날짜/에이전시/담당자 세로 스택
-      '<div class="event-meta-col">' +
-        '<div>📅 ' + dateStr + '</div>' +
-        (ev.agency ? '<div class="meta-agency">🏢 ' + escHtml(ev.agency) + '</div>' : '') +
-        (ev.manager_name ? '<div class="meta-manager">👤 ' + escHtml(ev.manager_name) + '</div>' : '') +
-      '</div>' +
-      // 우측 끝: 상태 + 화살표
-      '<div class="event-badge-col">' +
-        '<span class="status-badge ' + statusInfo.cls + '">' + statusInfo.label + '</span>' +
-        '<span class="event-arrow">›</span>' +
-      '</div>' +
-    '</div>';
-  }
-  html += '</div>';
-  container.innerHTML = html;
-}
-
-// 상대 시간 표시 ("방금 전", "3시간 전", "어제", "2일 전", "2026-04-01")
 function formatRelativeTime(iso) {
   if (!iso) return '';
   var t = new Date(iso).getTime();
@@ -1870,34 +1921,92 @@ function formatRelativeTime(iso) {
   if (diffSec < 86400) return Math.floor(diffSec / 3600) + '시간 전';
   if (diffSec < 86400 * 2) return '어제';
   if (diffSec < 86400 * 7) return Math.floor(diffSec / 86400) + '일 전';
-  // 7일 이상은 절대 날짜
   var d = new Date(iso);
   return d.getFullYear() + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + String(d.getDate()).padStart(2,'0');
 }
 
-/* ═══════════════════════════════════════════════════════
-   EVENT DETAIL
-═══════════════════════════════════════════════════════ */
-function openEventDetail(event) {
+/**
+ * 행사 목록을 진행 예정/지난 행사로 분리해 렌더한다.
+ * - active + upcoming → ongoing pane
+ * - ended/closed/completed → ended pane
+ * - 각 행사마다 룸을 병렬 fetch (Promise.all) 후 카드 본문을 다시 렌더
+ */
+function renderEventList(events) {
+  var ongoingPane = document.getElementById('pane-ongoing');
+  var endedPane = document.getElementById('pane-ended');
+
+  var ongoing = [];
+  var ended = [];
+  for (var i = 0; i < events.length; i++) {
+    var info = getEventStatusInfo(events[i]);
+    if (info.kind === 'ended') ended.push(events[i]);
+    else ongoing.push(events[i]);
+  }
+  eventsCache.ongoing = ongoing;
+  eventsCache.ended = ended;
+
+  // 1차: 룸 정보 없이 카드 골격 렌더 (룸 fetch 중 placeholder 표시)
+  ongoingPane.innerHTML = ongoing.length > 0
+    ? buildEventCardsHtml(ongoing, false)
+    : '<div class="empty-msg"><div class="icon">📋</div><div>예정된 행사가 없습니다</div></div>';
+  endedPane.innerHTML = ended.length > 0
+    ? buildEventCardsHtml(ended, true)
+    : '<div class="empty-msg"><div class="icon">📚</div><div>지난 행사가 없습니다</div></div>';
+
+  // 2차: 각 행사의 룸 정보 fetch (병렬) 후 액션 행 채움
+  var allEvents = ongoing.concat(ended);
+  for (var k = 0; k < allEvents.length; k++) {
+    fetchAndFillRooms(allEvents[k]);
+  }
+}
+
+/** 골격 HTML — 룸 영역은 placeholder */
+function buildEventCardsHtml(list, isEnded) {
+  var html = '';
+  for (var i = 0; i < list.length; i++) {
+    var ev = list[i];
+    var info = getEventStatusInfo(ev);
+    var dateStr = formatDateRange(ev.start_date, ev.end_date);
+    var updatedStr = formatRelativeTime(ev.updated_at);
+    var evJson = escAttr(ev);
+
+    html += '<div class="event-card" data-status="' + (isEnded ? 'ended' : info.dotStatus) + '" data-event-id="' + escHtml(ev.id) + '">' +
+      '<div class="event-header">' +
+        '<span class="event-status-dot" data-status="' + (isEnded ? 'ended' : info.dotStatus) + '"></span>' +
+        '<h3 class="event-name" onclick="trackCurrentEvent(' + evJson + ')">' + escHtml(ev.name) + '</h3>' +
+        (updatedStr ? '<span class="event-time">' + escHtml(updatedStr) + '</span>' : '') +
+      '</div>' +
+      '<div class="event-meta">' +
+        '<span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + escHtml(dateStr) + '</span>' +
+        (ev.agency ? '<span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>' + escHtml(ev.agency) + '</span>' : '') +
+        (ev.manager_name ? '<span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' + escHtml(ev.manager_name) + '</span>' : '') +
+      '</div>' +
+      '<div class="event-rooms-area" id="rooms-' + escHtml(ev.id) + '">' +
+        '<div style="font:500 12px/1 sans-serif;color:var(--text-3);padding:var(--space-3) 0">룸 정보 로드 중...</div>' +
+      '</div>' +
+    '</div>';
+  }
+  return html;
+}
+
+/** 마지막 클릭 행사 추적 (view 전환 미사용) */
+function trackCurrentEvent(event) {
   state.currentEvent = event;
-  // Back 버튼 long-press 로 복귀할 때 사용 (MainActivity.consumeLongPressReturn)
   try { localStorage.setItem('last_event_detail', JSON.stringify(event)); } catch(e) {}
-  showView('detail');
+}
 
-  document.getElementById('detail-name').textContent = event.name;
-  var meta = [];
-  if (event.start_date) meta.push('📅 ' + formatDateRange(event.start_date, event.end_date));
-  if (event.agency) meta.push('🏢 ' + event.agency);
-  document.getElementById('detail-meta').textContent = meta.join('   ');
+/** 각 행사 룸 fetch + 액션 행 렌더 */
+function fetchAndFillRooms(event) {
+  var areaId = 'rooms-' + event.id;
+  var area = document.getElementById(areaId);
+  if (!area) return;
 
-  var container = document.getElementById('detail-links-container');
-  container.innerHTML = '<div class="loading-box"><div class="spinner"></div><span>룸 정보 불러오는 중...</span></div>';
+  // 캐시 우선
+  if (roomsCache[event.id]) {
+    fillRoomActionRow(event, roomsCache[event.id]);
+    return;
+  }
 
-  // URL 경고 제거 (하드코딩된 BASE_URL 사용)
-  var warnEl = document.getElementById('detail-url-warning');
-  if (warnEl) warnEl.style.display = 'none';
-
-  // 프록시 우선, 실패 시 Supabase 직접 호출
   proxyFetch('/api/rooms?event_id=' + encodeURIComponent(event.id), function() {
     return supaFetch('rooms', {
       'select': 'id,name,slug,chair_token,console_token,moderator_token',
@@ -1905,134 +2014,179 @@ function openEventDetail(event) {
       'order': 'sort_order.asc.nullslast'
     });
   }).then(function(rooms) {
-    renderDetailLinks(event, rooms);
+    roomsCache[event.id] = rooms || [];
+    fillRoomActionRow(event, roomsCache[event.id]);
   }).catch(function(err) {
-    container.innerHTML = '<div class="empty-msg"><div class="icon">⚠️</div><div>룸 정보 불러오기 실패</div></div>';
+    SympotalkLog.push('warn', '룸 정보 로드 실패: ' + (err.message || ''), '행사의 룸 정보를 가져오지 못했습니다.');
+    var areaEl = document.getElementById(areaId);
+    if (areaEl) {
+      areaEl.innerHTML = '<div class="empty-rooms">' +
+        '<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '<div><strong>룸 정보를 불러올 수 없습니다</strong>네트워크 상태를 확인하고 새로고침해주세요.</div>' +
+      '</div>';
+    }
   });
 }
 
-function renderDetailLinks(event, rooms) {
-  var container = document.getElementById('detail-links-container');
-  var html = '';
+/** 룸 개수에 따라 액션 행을 렌더 (0/1/N+) */
+function fillRoomActionRow(event, rooms) {
+  var area = document.getElementById('rooms-' + event.id);
+  if (!area) return;
 
-  // ── 참석자 PADS 링크 (행사 단위, 룸 무관) ──
-  html += '<div class="link-group">';
-  html += '<div class="link-group-title">' +
-    '<svg style="width:14px;height:14px;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
-    '참석자 (PADS)' +
-  '</div>';
   var attendeeUrl = BASE_URL + '/pads/' + event.slug;
-  html += renderLinkBtn('icon-attendee', '📱', '참석자 태블릿 PADS', attendeeUrl, '/pads/' + event.slug, attendeeUrl);
-  html += '</div>';
+  var attendeeBtn =
+    '<button class="action-btn action-btn-attendee" onclick="trackCurrentEvent(' + escAttr(event) + ');openLink(\'' + encodeURIComponent(attendeeUrl) + '\')">' +
+      '<svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>' +
+      '참석자' +
+    '</button>';
 
-  // ── 운영자 링크 (룸별) ──
-  if (rooms && rooms.length > 0) {
-    for (var i = 0; i < rooms.length; i++) {
-      var room = rooms[i];
-      var roomId = room.id;
-      var slug = event.slug;
-      html += '<div class="link-group">';
-      html += '<div class="room-title">🚪 ' + escHtml(room.name || ('룸 ' + (i + 1))) + '</div>';
-
-      // 콘솔패드
-      if (room.console_token) {
-        var consoleUrl = BASE_URL + '/consolepad/' + slug + '/' + roomId + '?t=' + room.console_token;
-        html += renderLinkBtn('icon-console', '🖥️', '콘솔패드', consoleUrl,
-          '/consolepad/' + slug + '/' + roomId.substring(0, 8) + '…', consoleUrl);
-      }
-      // 좌장패드
-      if (room.chair_token) {
-        var chairUrl = BASE_URL + '/chair/' + slug + '/' + roomId + '?t=' + room.chair_token;
-        html += renderLinkBtn('icon-chair', '🎤', '좌장패드', chairUrl,
-          '/chair/' + slug + '/' + roomId.substring(0, 8) + '…', chairUrl);
-      }
-      // 사회자패드 (전달용 - 좌장전달모드 ON 시에만 작동)
-      if (room.moderator_token) {
-        var moderatorUrl = BASE_URL + '/moderator/' + slug + '/' + roomId + '?t=' + room.moderator_token;
-        html += renderLinkBtn('icon-moderator', '📋', '사회자패드 (전달용)', moderatorUrl,
-          '/moderator/' + slug + '/' + roomId.substring(0, 8) + '…', moderatorUrl);
-      }
-      // 태블릿 질문 스크린 (룸 ID 기반, 토큰 불필요)
-      var questionScreenUrl = BASE_URL + '/screen/questions/' + slug + '/' + roomId + '?mode=tablet';
-      html += renderLinkBtn('icon-screen', '📺', '태블릿 질문 스크린', questionScreenUrl,
-        '/screen/questions/' + slug + '/' + roomId.substring(0, 8) + '…', questionScreenUrl);
-      html += '</div>';
-    }
-  } else {
-    html += '<div class="link-group">' +
-      '<div class="link-group-title">🖥️ 운영자 링크</div>' +
-      '<div style="padding:14px 16px;color:#94a3b8;font-size:13px;background:#1e293b;border-radius:10px;border:1px solid #334155;line-height:1.6">' +
-        '<strong style="color:#fbbf24">⚠️ 등록된 룸이 없습니다</strong><br>' +
-        '이 행사는 아직 룸(세션장)이 등록되지 않아 콘솔·좌장·연자·사회자 패드 링크를 생성할 수 없습니다.<br>' +
-        '<span style="color:#64748b">sympotalk 관리자 페이지에서 룸을 먼저 추가해주세요.</span>' +
-      '</div>' +
-    '</div>';
+  if (!rooms || rooms.length === 0) {
+    // 룸 0개 — 참석자만 + 경고
+    area.innerHTML =
+      '<div class="action-row-empty">' + attendeeBtn + '</div>' +
+      '<div class="empty-rooms">' +
+        '<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '<div><strong>룸이 등록되지 않았습니다</strong>sympotalk 관리자에서 룸을 추가하면 콘솔 · 좌장 · 사회자 · 질문 링크가 자동 생성됩니다.</div>' +
+      '</div>';
+    return;
   }
 
-  container.innerHTML = html;
+  if (rooms.length === 1) {
+    // 룸 1개 — 5버튼 한 줄
+    var room = rooms[0];
+    var btns = build5RoomButtons(event, room);
+    area.innerHTML =
+      '<div class="section-label"><span class="name">' + escHtml(room.name || '룸') + '</span></div>' +
+      '<div class="action-row">' +
+        attendeeBtn +
+        btns.console +
+        btns.chair +
+        btns.moderator +
+        btns.question +
+      '</div>';
+    return;
+  }
+
+  // 룸 2개 이상 — 룸 선택 모달 트리거
+  var evJson = escAttr(event);
+  area.innerHTML =
+    '<div class="action-row-multi">' +
+      attendeeBtn +
+      '<button class="multiroom-btn" onclick="openRoomPicker(' + evJson + ')">' +
+        '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' +
+        '<span class="label">룸 선택</span>' +
+        '<span class="sub">' + rooms.length + '개 룸 — 콘솔 / 좌장 / 사회자 / 질문</span>' +
+      '</button>' +
+    '</div>';
 }
 
-function renderLinkBtn(iconCls, icon, label, subText, shortText, url) {
-  var encodedUrl = url ? url.replace(/"/g, '&quot;') : '';
-  var action = url ? 'onclick="openLink(\'' + encodeURIComponent(url) + '\')"' : '';
-  var cursor = url ? '' : 'opacity:0.5;cursor:default;';
-  return '<button class="link-btn" style="' + cursor + '" ' + action + '>' +
-    '<div class="link-btn-icon ' + iconCls + '">' + icon + '</div>' +
-    '<div class="link-btn-info">' +
-      '<div class="link-btn-label">' + escHtml(label) + '</div>' +
-      '<div class="link-btn-sub">' + escHtml(subText) + '</div>' +
-    '</div>' +
-    '<span class="link-btn-arrow">›</span>' +
-  '</button>';
+/** 단일 룸용 4-button (콘솔/좌장/사회자/질문) HTML 조각 생성 */
+function build5RoomButtons(event, room) {
+  var slug = event.slug;
+  var roomId = room.id;
+
+  var consoleUrl   = room.console_token   ? (BASE_URL + '/consolepad/' + slug + '/' + roomId + '?t=' + room.console_token) : '';
+  var chairUrl     = room.chair_token     ? (BASE_URL + '/chair/'      + slug + '/' + roomId + '?t=' + room.chair_token)   : '';
+  var moderatorUrl = room.moderator_token ? (BASE_URL + '/moderator/'  + slug + '/' + roomId + '?t=' + room.moderator_token) : '';
+  var questionUrl  = BASE_URL + '/screen/questions/' + slug + '/' + roomId + '?mode=tablet';
+  var evJson = escAttr(event);
+  var trackPrefix = 'trackCurrentEvent(' + evJson + ');';
+
+  function btn(url, svgInner, label, disabled) {
+    var dis = disabled ? ' disabled' : '';
+    var click = url ? (' onclick="' + trackPrefix + 'openLink(\'' + encodeURIComponent(url) + '\')"') : '';
+    return '<button class="action-btn"' + dis + click + '>' +
+      '<svg viewBox="0 0 24 24">' + svgInner + '</svg>' +
+      label +
+    '</button>';
+  }
+
+  return {
+    console:   btn(consoleUrl,
+      '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+      '콘솔', !consoleUrl),
+    chair:     btn(chairUrl,
+      '<path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+      '좌장', !chairUrl),
+    moderator: btn(moderatorUrl,
+      '<path d="M9 2h6a2 2 0 012 2v0a2 2 0 01-2 2H9a2 2 0 01-2-2v0a2 2 0 012-2z"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>',
+      '사회자', !moderatorUrl),
+    question:  btn(questionUrl,
+      '<path d="M2 3h20v12H2z"/><path d="M2 15l4 4h12l4-4"/><line x1="12" y1="19" x2="12" y2="22"/>',
+      '질문', false)
+  };
 }
 
 /* ═══════════════════════════════════════════════════════
-   LINK NAVIGATION (iframe 샌드박스 이슈 회피 — 직접 네비게이션)
+   ROOM PICKER MODAL (다중 룸)
+═══════════════════════════════════════════════════════ */
+function openRoomPicker(event) {
+  var rooms = roomsCache[event.id] || [];
+  var modal = document.getElementById('m-room-picker');
+  var sub = document.getElementById('m-room-picker-sub');
+  var body = document.getElementById('m-room-picker-body');
+  trackCurrentEvent(event);
+
+  sub.textContent = event.name + ' — ' + rooms.length + '개의 룸';
+
+  var html = '';
+  for (var i = 0; i < rooms.length; i++) {
+    var room = rooms[i];
+    var btns = build5RoomButtons(event, room);
+    html += '<div class="modal-room">' +
+      '<div class="section-label">ROOM ' + (i + 1) + ' · <span class="name">' + escHtml(room.name || ('룸 ' + (i + 1))) + '</span></div>' +
+      '<div class="room-grid-4">' +
+        btns.console +
+        btns.chair +
+        btns.moderator +
+        btns.question +
+      '</div>' +
+    '</div>';
+  }
+  body.innerHTML = html;
+  modal.classList.add('show');
+}
+
+function closeRoomPicker() {
+  document.getElementById('m-room-picker').classList.remove('show');
+}
+
+/* ═══════════════════════════════════════════════════════
+   LINK NAVIGATION (보존 — iframe 미사용 직접 네비)
 ═══════════════════════════════════════════════════════ */
 function openLink(encodedUrl) {
   var url = decodeURIComponent(encodedUrl);
-  // 세션에 복귀용 상태 저장 (뒤로가기 시 마지막 행사로 돌아가기 위함)
   try {
     if (state.currentEvent) {
       sessionStorage.setItem('last_event', JSON.stringify(state.currentEvent));
     }
   } catch(e) {}
-  // WebView/브라우저를 직접 URL로 이동 (쿼리스트링 포함 완전 전송)
-  // 뒤로가기: Android back 버튼 → webView.goBack() → 런처 HTML 복귀
   window.location.href = url;
 }
 
-/* iframe 기반 내장 브라우저는 v1.0.3에서 제거됨. window.location.href 로 직접 네비게이션 */
-
 /* ═══════════════════════════════════════════════════════
-   WIFI QR SCANNER
+   QR SCANNER (보존)
 ═══════════════════════════════════════════════════════ */
-function startQRScan() {
+function startScanner() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    document.getElementById('scan-status').innerHTML =
-      '<div class="camera-denied">이 기기에서는 카메라 접근이 지원되지 않습니다</div>';
+    var s1 = document.getElementById('scan-status');
+    if (s1) s1.textContent = '이 기기에서는 카메라 접근이 지원되지 않습니다';
     return;
   }
-
-  // 이미 실행 중이면 중복 호출 방지
   if (state.scannerStream) return;
 
-  document.getElementById('scan-status').textContent = '카메라 권한 요청 중...';
-  var stopBtn = document.getElementById('btn-stop-scan');
-  if (stopBtn) stopBtn.style.display = 'flex';
+  var statusEl = document.getElementById('scan-status');
+  if (statusEl) statusEl.textContent = '카메라 권한 요청 중...';
 
-  // 해상도 상향: 1920x1080 우선, 실패 시 1280x720 자동 폴백
-  // advanced constraints: 연속 포커스 + 높은 노출 샘플링
   var constraints = {
     video: {
       facingMode: { ideal: 'environment' },
       width: { ideal: 1920, min: 1280 },
       height: { ideal: 1080, min: 720 },
       frameRate: { ideal: 30, min: 15 },
-      // 기기가 지원하면 연속 autofocus + 근거리 모드
       advanced: [
         { focusMode: 'continuous' },
-        { focusDistance: { ideal: 0.1 } }  // 10cm 근거리 우선 (QR 근접 스캔)
+        { focusDistance: { ideal: 0.1 } }
       ]
     }
   };
@@ -2040,8 +2194,6 @@ function startQRScan() {
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     state.scannerStream = stream;
     var video = document.getElementById('qr-video');
-    var container = document.getElementById('scanner-container');
-    container.style.display = 'block';
     video.classList.remove('ready');
     video.srcObject = stream;
     video.onloadedmetadata = function() {
@@ -2053,23 +2205,21 @@ function startQRScan() {
         requestAnimationFrame(scanQRFrame);
       });
     };
-    document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
+    if (statusEl) statusEl.textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
   }).catch(function(err) {
-    // advanced constraint 실패 시 기본 제약으로 재시도
     if (err.name === 'OverconstrainedError') {
       navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       }).then(function(stream) {
         state.scannerStream = stream;
         var video = document.getElementById('qr-video');
-        document.getElementById('scanner-container').style.display = 'block';
         video.srcObject = stream;
         video.onloadedmetadata = function() {
           video.play().catch(function(){});
           video.classList.add('ready');
           requestAnimationFrame(scanQRFrame);
         };
-        document.getElementById('scan-status').textContent = 'QR 코드를 비춰주세요';
+        if (statusEl) statusEl.textContent = 'QR 코드를 비춰주세요';
       }).catch(showCameraError);
       return;
     }
@@ -2077,15 +2227,13 @@ function startQRScan() {
   });
 
   function showCameraError(err) {
-    if (stopBtn) stopBtn.style.display = 'none';
     var msg = err.name === 'NotAllowedError'
-      ? '카메라 권한이 거부되었습니다.<br>설정 → 권한에서 카메라 허용해주세요.'
+      ? '카메라 권한이 거부되었습니다. 설정에서 카메라 허용 후 재시도'
       : '카메라를 열 수 없습니다: ' + err.message;
-    document.getElementById('scan-status').innerHTML = '<div class="camera-denied">' + msg + '</div>';
+    if (statusEl) statusEl.textContent = msg;
   }
 }
 
-// 프레임 성능 튜닝: 매 프레임이 아니라 2프레임마다 디코딩 (약 15fps) → CPU 절약
 var scanFrameCounter = 0;
 
 function scanQRFrame() {
@@ -2095,12 +2243,8 @@ function scanQRFrame() {
   var canvas = document.getElementById('qr-canvas');
 
   if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    // 2 프레임마다 디코딩 (너무 잦은 인식 시도는 CPU 부담 + 결과 동일)
     if ((scanFrameCounter++ % 2) === 0) {
       var vw = video.videoWidth, vh = video.videoHeight;
-
-      // ROI: 화면 중앙 정사각형 (짧은 쪽의 70%) — QR 은 보통 중앙에 비추므로
-      // 전체 대비 인식 속도 2~4배, 주변 간섭 제거
       var side = Math.floor(Math.min(vw, vh) * 0.7);
       var sx = Math.floor((vw - side) / 2);
       var sy = Math.floor((vh - side) / 2);
@@ -2112,7 +2256,6 @@ function scanQRFrame() {
       var imageData = ctx.getImageData(0, 0, side, side);
 
       if (typeof jsQR !== 'undefined') {
-        // attemptBoth: 원본 + 반전 양쪽 시도 (어두운 배경 QR 도 인식)
         var code = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: 'attemptBoth'
         });
@@ -2128,43 +2271,46 @@ function scanQRFrame() {
 }
 
 function handleQRResult(text) {
-  document.getElementById('scan-status').textContent = '✅ QR 코드 인식 완료';
+  var statusEl = document.getElementById('scan-status');
+  if (statusEl) statusEl.textContent = 'QR 코드 인식 완료';
   var trimmed = (text || '').trim();
+  var resultArea = document.getElementById('qr-result-area');
 
-  // URL 패턴 감지 (http:// 또는 https://)
   var urlMatch = trimmed.match(/^(https?:\/\/[^\s]+)$/i);
   if (urlMatch) {
     var url = urlMatch[1];
-    document.getElementById('qr-url-text').textContent = url;
-    document.getElementById('qr-url-card').style.display = 'block';
-    document.getElementById('qr-raw-card').classList.remove('show');
-
-    // 열기 버튼 활성화
-    var openBtn = document.getElementById('btn-open-qr-url');
-    openBtn.onclick = function() {
-      stopQRScan();
-      openLink(encodeURIComponent(url));
-    };
+    if (resultArea) {
+      resultArea.innerHTML =
+        '<div class="info-grid">' +
+          '<div class="info-row"><div class="label">유형</div><div class="value">URL 진입</div></div>' +
+          '<div class="info-row"><div class="label">스캔 시각</div><div class="value">' + new Date().toLocaleTimeString('ko-KR') + '</div></div>' +
+        '</div>' +
+        '<div style="margin-top:var(--space-3);font:500 12px/1.4 sans-serif;color:var(--text-2);word-break:break-all">' + escHtml(url) + '</div>' +
+        '<button class="btn-primary" style="margin-top:var(--space-3)" onclick="stopScanner();openLink(\'' + encodeURIComponent(url) + '\')">브라우저에서 열기</button>';
+    }
 
     if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
 
-    // 자동 열기 (선택): 1초 후 자동으로 링크 열기
     setTimeout(function() {
-      if (state.scannerStream) {  // 사용자가 중지하지 않았으면
-        stopQRScan();
+      if (state.scannerStream) {
+        stopScanner();
         openLink(encodeURIComponent(url));
       }
     }, 1200);
     return;
   }
 
-  // URL이 아닌 일반 텍스트
-  document.getElementById('qr-raw-text').textContent = trimmed;
-  document.getElementById('qr-raw-card').classList.add('show');
-  document.getElementById('qr-url-card').style.display = 'none';
+  // URL 이 아닌 일반 텍스트
+  if (resultArea) {
+    resultArea.innerHTML =
+      '<div class="info-grid">' +
+        '<div class="info-row"><div class="label">유형</div><div class="value">일반 텍스트</div></div>' +
+        '<div class="info-row"><div class="label">스캔 시각</div><div class="value">' + new Date().toLocaleTimeString('ko-KR') + '</div></div>' +
+      '</div>' +
+      '<div style="margin-top:var(--space-3);font:500 12px/1.4 sans-serif;color:var(--text-1);word-break:break-all;padding:var(--space-3);background:var(--bg-elevated);border:1px solid var(--border-base);border-radius:var(--radius)">' + escHtml(trimmed) + '</div>';
+  }
   if (navigator.vibrate) navigator.vibrate(100);
 
-  // 스캐너 계속 실행 (다른 QR 스캔 가능)
   setTimeout(function() {
     if (state.scannerStream) {
       state.scannerRAF = requestAnimationFrame(scanQRFrame);
@@ -2172,7 +2318,7 @@ function handleQRResult(text) {
   }, 2000);
 }
 
-function stopQRScan() {
+function stopScanner() {
   if (state.scannerRAF) {
     cancelAnimationFrame(state.scannerRAF);
     state.scannerRAF = null;
@@ -2185,29 +2331,35 @@ function stopQRScan() {
     state.scannerStream = null;
   }
   var video = document.getElementById('qr-video');
-  video.srcObject = null;
-  video.classList.remove('ready');
-  document.getElementById('scanner-container').style.display = 'none';
-  var stopBtn = document.getElementById('btn-stop-scan');
-  if (stopBtn) stopBtn.style.display = 'none';
-  document.getElementById('scan-status').textContent = '웹 링크 QR 코드를 카메라에 비춰주세요';
+  if (video) {
+    video.srcObject = null;
+    video.classList.remove('ready');
+  }
+  var statusEl = document.getElementById('scan-status');
+  if (statusEl) statusEl.textContent = '카메라 정지됨 — 재시작 버튼을 눌러주세요';
   scanFrameCounter = 0;
 }
 
+function restartScanner() {
+  stopScanner();
+  setTimeout(startScanner, 250);
+}
+
+// 호환 (보존 함수명 별칭)
+function startQRScan() { startScanner(); }
+function stopQRScan() { stopScanner(); }
+
 /* ═══════════════════════════════════════════════════════
-   WAKE LOCK / KEEP ALIVE
+   WAKE LOCK / KEEP ALIVE (보존)
 ═══════════════════════════════════════════════════════ */
 function enableNoSleep() {
-  // Chrome 84+ WakeLock API 시도
   if ('wakeLock' in navigator) {
     navigator.wakeLock.request('screen').then(function(lock) {
       state.wakeLock = lock;
       lock.addEventListener('release', function() {
-        // WakeLock 해제 시 재시도 (화면 복귀 후)
         setTimeout(enableNoSleep, 1000);
       });
     }).catch(function() {
-      // WakeLock 실패 시 비디오 trick 사용
       startVideoNoSleep();
     });
   } else {
@@ -2217,11 +2369,10 @@ function enableNoSleep() {
 
 function startVideoNoSleep() {
   var video = document.getElementById('nosleep-video');
+  if (!video) return;
   var playPromise = video.play();
   if (playPromise !== undefined) {
-    playPromise.catch(function() {
-      // 자동 재생 실패 시 무시 (사용자 인터랙션 필요)
-    });
+    playPromise.catch(function() {});
   }
 }
 
@@ -2230,7 +2381,6 @@ function requestWakeLock() {
   showToast('절전 방지 활성화됨');
 }
 
-// 페이지 재활성화 시 wakeLock 재요청 (행사 목록 자동 갱신 없음 — v1.0.31+)
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible') {
     if (!state.wakeLock || state.wakeLock.released) {
@@ -2239,13 +2389,6 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
-/* ═══════════════════════════════════════════════════════
-   AUTO-REFRESH 제거됨 (v1.0.31+)
-   - 사용자가 상단 "새로고침" 버튼으로만 갱신
-   - visibilitychange 시에도 갱신 안 함 (앱으로 복귀해도 자동 로드 X)
-═══════════════════════════════════════════════════════ */
-
-// Service Worker 로만 keepalive (Supabase 핑 제거)
 function startSWKeepalive() {
   if (!navigator.serviceWorker) return;
   setInterval(function() {
@@ -2255,11 +2398,11 @@ function startSWKeepalive() {
         navigator.serviceWorker.controller.postMessage('keepalive', [ch.port2]);
       } catch(e) {}
     }
-  }, 5 * 60 * 1000);  // 5분
+  }, 5 * 60 * 1000);
 }
 
 /* ═══════════════════════════════════════════════════════
-   NETWORK DIAGNOSTIC
+   NETWORK DIAGNOSTIC (보존)
 ═══════════════════════════════════════════════════════ */
 function runNetworkDiagnostic() {
   var resultEl = document.getElementById('net-diag-result');
@@ -2281,18 +2424,17 @@ function runNetworkDiagnostic() {
     var html = '';
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
-      var icon = r.ok ? '✅' : '❌';
-      var color = r.ok ? '#22c55e' : '#ef4444';
-      html += '<div>' + icon + ' <strong style="color:' + color + '">' + r.name + '</strong>: ' +
-        (r.ok ? (r.time + 'ms') : escHtml(r.error || '실패')) + '</div>';
+      var color = r.ok ? 'var(--accent)' : 'var(--danger)';
+      var label = r.ok ? (r.time + 'ms') : escHtml(r.error || '실패');
+      html += '<div><strong style="color:' + color + '">' + r.name + '</strong>: ' + label + '</div>';
     }
     if (completed === targets.length) {
       var allOk = results.every(function(r){ return r.ok; });
       html += '<div style="margin-top:8px;padding:8px;border-radius:6px;background:' +
-        (allOk ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)') +
-        ';color:' + (allOk ? '#22c55e' : '#fbbf24') + '">' +
-        (allOk ? '✓ 모든 서비스에 정상 연결됩니다' :
-          '✗ 일부 서비스 연결 실패 — WiFi 상태와 공유기 인터넷 연결을 확인해주세요') +
+        (allOk ? 'var(--accent-fill)' : 'rgba(255,184,0,0.1)') +
+        ';color:' + (allOk ? 'var(--accent)' : 'var(--warning)') + '">' +
+        (allOk ? '모든 서비스에 정상 연결됩니다' :
+          '일부 서비스 연결 실패 — WiFi 와 공유기 인터넷 연결을 확인해주세요') +
         '</div>';
     }
     resultEl.innerHTML = html;
@@ -2301,7 +2443,7 @@ function runNetworkDiagnostic() {
   targets.forEach(function(t, idx) {
     var start = Date.now();
     fetch(t.url, { method: 'GET', cache: 'no-store', mode: 'cors' })
-      .then(function(res) {
+      .then(function() {
         results[idx] = { name: t.name, ok: true, time: Date.now() - start };
       })
       .catch(function(err) {
@@ -2315,18 +2457,13 @@ function runNetworkDiagnostic() {
   });
 }
 
-/* ═══════════════════════════════════════════════════════
-   PING TEST — LAN Gateway (공유기) 왕복시간
-   - APK 환경: AndroidBridge.pingGateway() (네이티브 InetAddress.isReachable)
-   - 웹 환경: 불가 (브라우저는 LAN ICMP 접근 안 됨)
-═══════════════════════════════════════════════════════ */
 function runPingTest() {
   var btn = document.getElementById('btn-ping');
   var resultEl = document.getElementById('ping-result');
   btn.disabled = true;
 
   if (!hasNativeBridge || typeof AndroidBridge.pingGateway !== 'function') {
-    resultEl.innerHTML = '<div style="color:#fbbf24">⚠️ APK 환경 필요 (v1.0.26+)</div>';
+    resultEl.innerHTML = '<small>APK v1.0.26+ 필요</small>';
     btn.disabled = false;
     return;
   }
@@ -2334,12 +2471,12 @@ function runPingTest() {
   var gateway = '';
   try { gateway = AndroidBridge.getGatewayIp(); } catch(e) {}
   if (!gateway) {
-    resultEl.innerHTML = '<div style="color:#ef4444">❌ WiFi 연결을 먼저 확인해주세요 (Gateway 주소 없음)</div>';
+    resultEl.innerHTML = '<small style="color:var(--danger)">WiFi 연결 확인 필요</small>';
     btn.disabled = false;
     return;
   }
 
-  resultEl.innerHTML = '🔍 Gateway ' + gateway + ' 측정 중... (5회)';
+  resultEl.innerHTML = '측정 중...';
 
   var samples = 5;
   var results = [];
@@ -2348,14 +2485,13 @@ function runPingTest() {
 
   function tick() {
     if (i >= samples) { finish(); return; }
-    // pingGateway 는 blocking native call → setTimeout 으로 UI 스레드 양보
     setTimeout(function() {
       var ms = -1;
       try { ms = AndroidBridge.pingGateway(2000); } catch(e) {}
       if (ms >= 0) results.push(ms);
       else fails++;
       i++;
-      resultEl.innerHTML = '🔍 Gateway ' + gateway + ' 측정 중... (' + i + '/' + samples + ')';
+      resultEl.innerHTML = '측정 중... ' + i + '/' + samples;
       setTimeout(tick, 150);
     }, 50);
   }
@@ -2363,42 +2499,25 @@ function runPingTest() {
   function finish() {
     btn.disabled = false;
     if (results.length === 0) {
-      resultEl.innerHTML =
-        '<div><strong>🏠 Gateway:</strong> ' + gateway + '</div>' +
-        '<div style="color:#ef4444">❌ 공유기에 접근할 수 없습니다 (' + samples + '회 모두 실패)</div>';
+      resultEl.innerHTML = '<small style="color:var(--danger)">전부 실패</small>';
       return;
     }
-    var min = Math.min.apply(null, results);
-    var max = Math.max.apply(null, results);
     var avg = results.reduce(function(a,b){return a+b;}, 0) / results.length;
-    var lossPct = Math.round(fails / samples * 100);
-    var quality = avg < 5  ? '🟢 매우 빠름'
-                : avg < 20 ? '🟢 양호'
-                : avg < 50 ? '🟡 보통'
-                : '🔴 느림 (공유기 부하 가능)';
-    resultEl.innerHTML =
-      '<div><strong>🏠 Gateway:</strong> ' + gateway + ' · 📡 LAN Ping</div>' +
-      '<div><strong>샘플:</strong> ' + results.length + '/' + samples +
-        (lossPct > 0 ? ' (손실 ' + lossPct + '%)' : '') + '</div>' +
-      '<div><strong>응답:</strong> min ' + min + 'ms · avg ' + avg.toFixed(0) + 'ms · max ' + max + 'ms</div>' +
-      '<div style="margin-top:4px">' + quality + '</div>';
+    resultEl.innerHTML = avg.toFixed(0) + '<small>ms</small>';
+    if (avg >= 50) resultEl.classList.add('warn');
+    else resultEl.classList.remove('warn');
   }
 
   tick();
 }
 
-/* ═══════════════════════════════════════════════════════
-   SPEED TEST — XMLHttpRequest 기반 (WebView file:// 호환성)
-   - fetch + ReadableStream 은 WebView 에서 끊기거나 진행률 안 나오는 경우가 있어 XHR 로 교체
-   - onprogress 는 WebKit/Blink 양쪽 모두 안정적으로 동작
-═══════════════════════════════════════════════════════ */
 function runSpeedTest() {
   var btn = document.getElementById('btn-speed');
   var resultEl = document.getElementById('speed-result');
   btn.disabled = true;
-  resultEl.innerHTML = '🔗 서버 연결 중...';
+  resultEl.innerHTML = '연결 중...';
 
-  var sizeBytes = 5 * 1000 * 1000;   // 5MB (WebView 메모리 부담 감소)
+  var sizeBytes = 5 * 1000 * 1000;
   var url = 'https://speed.cloudflare.com/__down?bytes=' + sizeBytes + '&_=' + Date.now();
 
   var start = 0;
@@ -2407,24 +2526,20 @@ function runSpeedTest() {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.responseType = 'arraybuffer';
-  xhr.timeout = 30000;   // 30초 timeout
+  xhr.timeout = 30000;
 
   xhr.onloadstart = function() {
     start = performance.now();
-    resultEl.innerHTML = '📥 다운로드 중... 0%';
+    resultEl.innerHTML = '0%';
   };
 
   xhr.onprogress = function(e) {
     var now = performance.now();
-    if (now - lastUiUpdate < 200) return;   // 200ms throttle
+    if (now - lastUiUpdate < 200) return;
     lastUiUpdate = now;
-    var loadedMB = (e.loaded / 1000000).toFixed(1);
     if (e.lengthComputable && e.total > 0) {
       var pct = Math.round(e.loaded / e.total * 100);
-      resultEl.innerHTML = '📥 다운로드 중... ' + pct + '% (' + loadedMB + ' / ' +
-        (e.total/1000000).toFixed(1) + ' MB)';
-    } else {
-      resultEl.innerHTML = '📥 다운로드 중... ' + loadedMB + ' MB';
+      resultEl.innerHTML = pct + '<small>%</small>';
     }
   };
 
@@ -2433,51 +2548,42 @@ function runSpeedTest() {
     var elapsed = (performance.now() - start) / 1000;
     var bytes = xhr.response ? xhr.response.byteLength : 0;
     if (xhr.status !== 200) {
-      resultEl.innerHTML = '<div style="color:#ef4444">❌ HTTP ' + xhr.status + '</div>';
+      resultEl.innerHTML = '<small style="color:var(--danger)">HTTP ' + xhr.status + '</small>';
       return;
     }
     if (!bytes || elapsed < 0.01) {
-      resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 불가 (응답 데이터 없음)</div>';
+      resultEl.innerHTML = '<small style="color:var(--danger)">측정 불가</small>';
       return;
     }
     var mbps = (bytes * 8 / elapsed / 1000000);
-    var quality = mbps >= 50 ? '🟢 매우 빠름'
-                : mbps >= 20 ? '🟢 양호 (HD 스트리밍 가능)'
-                : mbps >= 5  ? '🟡 보통'
-                : '🔴 느림 (공유기 점검 권장)';
-    resultEl.innerHTML =
-      '<div><strong>⚡ 속도:</strong> <span style="font-size:20px;color:#60a5fa;font-weight:700">' +
-        mbps.toFixed(2) + ' Mbps</span></div>' +
-      '<div><strong>다운로드:</strong> ' + (bytes/1000000).toFixed(1) + ' MB / ' +
-        elapsed.toFixed(1) + '초</div>' +
-      '<div style="margin-top:4px">' + quality + '</div>';
+    resultEl.innerHTML = mbps.toFixed(1) + '<small>Mbps</small>';
   };
 
   xhr.onerror = function() {
     btn.disabled = false;
-    resultEl.innerHTML = '<div style="color:#ef4444">❌ 네트워크 오류 — WiFi 연결을 확인해주세요</div>';
+    resultEl.innerHTML = '<small style="color:var(--danger)">네트워크 오류</small>';
   };
 
   xhr.ontimeout = function() {
     btn.disabled = false;
-    resultEl.innerHTML = '<div style="color:#fbbf24">⏱️ 시간 초과 (30초) — 연결이 매우 느립니다</div>';
+    resultEl.innerHTML = '<small style="color:var(--warning)">시간 초과</small>';
   };
 
   xhr.onabort = function() {
     btn.disabled = false;
-    resultEl.innerHTML = '<div style="color:#64748b">측정 취소됨</div>';
+    resultEl.innerHTML = '<small>취소됨</small>';
   };
 
   try {
     xhr.send();
   } catch (err) {
     btn.disabled = false;
-    resultEl.innerHTML = '<div style="color:#ef4444">❌ 측정 시작 실패: ' + escHtml(err.message) + '</div>';
+    resultEl.innerHTML = '<small style="color:var(--danger)">시작 실패</small>';
   }
 }
 
 /* ═══════════════════════════════════════════════════════
-   APP LOG UI (설정 탭 로그 뷰어)
+   APP LOG UI (보존, mockup 스타일에 맞게 출력 형식만 조정)
 ═══════════════════════════════════════════════════════ */
 function renderLogUI() {
   var logs = SympotalkLog.read();
@@ -2485,10 +2591,10 @@ function renderLogUI() {
   var countEl = document.getElementById('app-log-count');
   if (!listEl) return;
 
-  countEl.textContent = logs.length + '건 (최대 ' + SympotalkLog.MAX + '건)';
+  if (countEl) countEl.textContent = logs.length + '건 / 최대 ' + SympotalkLog.MAX;
 
   if (logs.length === 0) {
-    listEl.innerHTML = '<div style="text-align:center;color:#475569;padding:24px">기록된 로그가 없습니다</div>';
+    listEl.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:24px;font:500 12px/1 sans-serif">기록된 로그가 없습니다</div>';
     return;
   }
 
@@ -2497,26 +2603,22 @@ function renderLogUI() {
   for (var i = logs.length - 1; i >= 0; i--) {
     var log = logs[i];
     var d = new Date(log.ts);
-    var timeStr = String(d.getMonth()+1) + '/' + String(d.getDate()) + ' ' +
-      String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' +
-      String(d.getSeconds()).padStart(2,'0');
+    var timeStr = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 
-    var icon, color, label;
+    var dotClass;
     switch (log.lv) {
-      case 'error':   icon = '🔴'; color = '#ef4444'; label = '오류'; break;
-      case 'warn':    icon = '🟡'; color = '#fbbf24'; label = '경고'; break;
-      case 'success': icon = '🟢'; color = '#22c55e'; label = '성공'; break;
-      default:        icon = '🔵'; color = '#60a5fa'; label = '정보'; break;
+      case 'error':   dotClass = 'error'; break;
+      case 'warn':    dotClass = 'warn'; break;
+      case 'success': dotClass = 'success'; break;
+      default:        dotClass = 'info'; break;
     }
 
-    html += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;line-height:1.5">' +
-      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">' +
-        '<span>' + icon + '</span>' +
-        '<span style="font-size:11px;font-weight:700;color:' + color + '">' + label + '</span>' +
-        '<span style="margin-left:auto;font-size:10px;color:#475569">' + timeStr + '</span>' +
-      '</div>' +
-      '<div style="font-size:12px;color:#cbd5e1;word-break:break-all">' + escHtml(log.msg) + '</div>' +
-      (log.exp ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px;padding-left:22px">💡 ' + escHtml(log.exp) + '</div>' : '') +
+    html += '<div class="log-item">' +
+      '<span class="log-dot ' + dotClass + '"></span>' +
+      '<span class="log-time">' + timeStr + '</span>' +
+      '<span class="log-msg">' + escHtml(log.msg) +
+        (log.exp ? '<span class="exp">' + escHtml(log.exp) + '</span>' : '') +
+      '</span>' +
     '</div>';
   }
   listEl.innerHTML = html;
@@ -2535,7 +2637,6 @@ function copyLogs() {
   text += '--- 앱 버전: ' + (hasNativeBridge && AndroidBridge.getAppVersion
     ? AndroidBridge.getAppVersion() : '웹') + ' ---\n';
 
-  // 클립보드 복사
   var textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.cssText = 'position:fixed;top:-999px;left:-999px';
@@ -2555,11 +2656,26 @@ function clearLogs() {
   }
 }
 
+/** 캐시/로그/WiFi 기본 비밀번호 일괄 초기화 (Danger zone) */
+function clearAllAppData() {
+  if (!confirm('저장된 행사 정보, 로그, WiFi 자동 연결 기록을 모두 삭제합니다.\n계속하시겠습니까?')) return;
+  try {
+    SympotalkLog.clear();
+    localStorage.removeItem('default_wifi_pw');
+    localStorage.removeItem('last_event_detail');
+    localStorage.removeItem('expecting_update_to');
+    localStorage.removeItem('expecting_since');
+    sessionStorage.clear();
+  } catch(e) {}
+  showToast('초기화되었습니다');
+  setTimeout(function(){ location.reload(); }, 800);
+}
+
 /* ═══════════════════════════════════════════════════════
-   APP UPDATE (APK 자동 업데이트 - Native Bridge 연동)
+   APP UPDATE (보존)
 ═══════════════════════════════════════════════════════ */
 var pendingApkUrl = null;
-var pendingUpdateVersion = null;   // 설치 시도 중인 버전 (실패 감지용)
+var pendingUpdateVersion = null;
 
 function hasAppUpdateBridge() {
   return hasNativeBridge
@@ -2577,9 +2693,6 @@ function updateCurrentAppVersion() {
   }
 }
 
-// 간이 마크다운 → HTML 렌더링 (GitHub release body 용)
-// 처리 순서가 중요: 코드 블록 격리 → 헤더/리스트(블록) → 인라인(볼드/이탤릭/URL) → br
-// XSS 방지: 원본 escape 후 허용 패턴만 재구성
 function renderMarkdownLite(md) {
   if (!md) return '';
   var html = String(md)
@@ -2587,40 +2700,34 @@ function renderMarkdownLite(md) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // 1) 코드 블록을 먼저 placeholder 로 분리 (이후 치환에서 보호)
   var codeStash = [];
   html = html.replace(/`([^`\n]+)`/g, function(_, code) {
     codeStash.push(code);
-    return '\u0001CODE' + (codeStash.length - 1) + '\u0001';
+    return 'CODE' + (codeStash.length - 1) + '';
   });
 
-  // 2) 블록 요소: 헤더, 리스트 (multiline)
-  html = html.replace(/^###\s+(.+)$/gm, '<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin:6px 0 3px">$1</div>');
-  html = html.replace(/^##\s+(.+)$/gm,  '<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin:8px 0 4px">$1</div>');
-  html = html.replace(/^#\s+(.+)$/gm,   '<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin:10px 0 4px">$1</div>');
+  html = html.replace(/^###\s+(.+)$/gm, '<div style="font-size:13px;font-weight:700;color:var(--text-1);margin:6px 0 3px">$1</div>');
+  html = html.replace(/^##\s+(.+)$/gm,  '<div style="font-size:14px;font-weight:700;color:var(--text-1);margin:8px 0 4px">$1</div>');
+  html = html.replace(/^#\s+(.+)$/gm,   '<div style="font-size:15px;font-weight:700;color:var(--text-1);margin:10px 0 4px">$1</div>');
   html = html.replace(/^[-*]\s+(.+)$/gm, '<div style="padding-left:14px;position:relative"><span style="position:absolute;left:0">•</span>$1</div>');
 
-  // 3) 인라인: 볼드 → 이탤릭
-  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:#f1f5f9">$1</strong>');
-  html = html.replace(/(^|\s)_([^_\n]+)_/g, '$1<em style="color:#cbd5e1">$2</em>');
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="color:var(--text-1)">$1</strong>');
+  html = html.replace(/(^|\s)_([^_\n]+)_/g, '$1<em style="color:var(--text-2)">$2</em>');
 
-  // 4) URL 자동 링크 — 후행 문장부호는 링크에서 제외
   html = html.replace(/https?:\/\/[^\s<]+/g, function(url) {
     var trailing = '';
     while (url.length > 0 && /[.,;:!?)\]]/.test(url.slice(-1))) {
       trailing = url.slice(-1) + trailing;
       url = url.slice(0, -1);
     }
-    return '<a href="' + url + '" style="color:#60a5fa" target="_blank">' + url + '</a>' + trailing;
+    return '<a href="' + url + '" style="color:var(--accent)" target="_blank">' + url + '</a>' + trailing;
   });
 
-  // 5) 블록 요소 뒤 개행 정리 + 나머지 \n → <br>
   html = html.replace(/<\/div>\n/g, '</div>');
   html = html.replace(/\n/g, '<br>');
 
-  // 6) 코드 블록 복원 (escape 된 상태 그대로)
-  html = html.replace(/\u0001CODE(\d+)\u0001/g, function(_, idx) {
-    return '<code style="background:#0f172a;padding:1px 5px;border-radius:3px;font-size:11px;color:#93c5fd">' +
+  html = html.replace(/CODE(\d+)/g, function(_, idx) {
+    return '<code style="background:var(--bg-press);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--accent-soft)">' +
       codeStash[parseInt(idx, 10)] + '</code>';
   });
 
@@ -2637,32 +2744,34 @@ function updateLastCheckTimestamp() {
 }
 
 function checkAppUpdate() {
+  var card = document.getElementById('app-update-status-card');
   var statusEl = document.getElementById('app-update-status');
   var btnEl = document.getElementById('btn-check-app-update');
+  if (card) card.style.display = 'block';
 
   if (!hasAppUpdateBridge()) {
-    statusEl.innerHTML = 'APK 환경에서만 사용 가능. <strong>v1.0.11+ APK 설치 필요</strong>';
+    statusEl.textContent = 'APK 환경에서만 사용 가능 (v1.0.11+ APK 필요)';
     return;
   }
-  statusEl.textContent = '🔍 최신 버전 확인 중...';
-  btnEl.disabled = true;
+  statusEl.textContent = '최신 버전 확인 중...';
+  if (btnEl) btnEl.disabled = true;
   document.getElementById('app-update-available').style.display = 'none';
+  document.getElementById('app-install-failed').style.display = 'none';
 
   try {
     AndroidBridge.checkAppUpdate();
   } catch(e) {
     statusEl.textContent = '확인 실패: ' + e.message;
-    btnEl.disabled = false;
+    if (btnEl) btnEl.disabled = false;
   }
 }
 
-// Native → JS 콜백
 window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
   var statusEl = document.getElementById('app-update-status');
   var btnEl = document.getElementById('btn-check-app-update');
   var latestEl = document.getElementById('app-update-latest');
   var panelEl = document.getElementById('app-update-available');
-  btnEl.disabled = false;
+  if (btnEl) btnEl.disabled = false;
 
   updateLastCheckTimestamp();
   SympotalkLog.push(
@@ -2673,11 +2782,9 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
       : '업데이트 확인 중 문제가 발생했습니다.'
   );
   if (status === 'available') {
-    latestEl.textContent = 'v' + latestVersion;
-    latestEl.style.color = '#22c55e';
-    statusEl.textContent = '✅ 새 버전 발견';
+    if (latestEl) latestEl.textContent = 'v' + latestVersion;
+    statusEl.textContent = '새 버전 발견';
     document.getElementById('app-update-avail-version').textContent = 'v' + latestVersion;
-    // "현재 → 새 버전" 표기
     var fromEl = document.getElementById('app-update-from');
     if (fromEl) {
       var cur = (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function')
@@ -2689,17 +2796,15 @@ window.onAppUpdateResult = function(status, latestVersion, apkUrl, notes) {
     pendingUpdateVersion = latestVersion;
     panelEl.style.display = 'block';
   } else if (status === 'uptodate') {
-    latestEl.textContent = 'v' + latestVersion;
-    latestEl.style.color = '#94a3b8';
-    statusEl.textContent = '✅ 최신 버전을 사용 중입니다';
+    if (latestEl) latestEl.textContent = 'v' + latestVersion;
+    statusEl.textContent = '최신 버전을 사용 중입니다';
     panelEl.style.display = 'none';
   } else {
-    // 네트워크 에러면 WiFi 버튼 제공
     if (isNetworkFailure(notes || '')) {
-      statusEl.innerHTML = '📶 인터넷 연결 실패. WiFi 확인 후 다시 시도해주세요.' +
-        ' <button class="btn-save" style="margin-top:6px;width:auto;padding:6px 12px;background:#60a5fa" onclick="openWifiSettings()">WiFi 설정</button>';
+      statusEl.innerHTML = '인터넷 연결 실패. WiFi 확인 후 다시 시도해주세요. ' +
+        '<button class="btn-line" style="margin-left:8px" onclick="openWifiSettings()">WiFi 설정</button>';
     } else {
-      statusEl.textContent = '❌ ' + (notes || '확인 실패');
+      statusEl.textContent = notes || '확인 실패';
     }
     panelEl.style.display = 'none';
   }
@@ -2715,8 +2820,7 @@ function startAppDownload() {
   document.getElementById('app-download-progress-wrap').style.display = 'block';
   document.getElementById('app-download-percent').textContent = '0%';
   document.getElementById('app-download-bar').style.width = '0%';
-  document.getElementById('app-update-status').textContent = '📥 다운로드를 시작합니다...';
-  // 재시도 시 이전 판정 상태 리셋 + 새 타임스탬프 기록
+  document.getElementById('app-update-status').textContent = '다운로드를 시작합니다...';
   installOutcomeShown = false;
   try { localStorage.setItem('expecting_since', String(Date.now())); } catch(e) {}
   try {
@@ -2733,23 +2837,17 @@ window.onAppDownloadProgress = function(percent) {
 
 window.onAppDownloadComplete = function() {
   document.getElementById('app-download-progress-wrap').style.display = 'none';
-  document.getElementById('app-update-status').innerHTML = '✅ 다운로드 완료 · <strong>설치 화면으로 이동합니다</strong>';
-  // 설치 성공/실패 감지 플래그: localStorage 로 APK 재시작 후에도 유지
+  document.getElementById('app-update-status').textContent = '다운로드 완료 — 설치 화면으로 이동합니다';
   try { localStorage.setItem('expecting_update_to', pendingUpdateVersion || ''); } catch(e) {}
 };
 
 window.onAppDownloadError = function(msg) {
   document.getElementById('app-download-progress-wrap').style.display = 'none';
-  document.getElementById('app-update-status').innerHTML = '❌ ' + msg;
+  document.getElementById('app-update-status').textContent = msg;
 };
 
-// 설치 결과 판정은 1회만 표시 (재진입 방지 플래그)
 var installOutcomeShown = false;
 
-// 설치 시도 후 앱 복귀 시 실제 설치 성공 여부 확인
-// — localStorage 사용: APK 재설치로 프로세스 kill 된 뒤에도 유지
-// — BuildConfig.VERSION_NAME (native) 을 단일 진실로 사용
-// — 사용자 취소/실패 모두 "업데이트가 완료되지 않았습니다" 로 완화된 문구
 function checkInstallOutcome() {
   if (installOutcomeShown) return;
 
@@ -2760,38 +2858,30 @@ function checkInstallOutcome() {
   } catch(e) { return; }
   if (!expecting) return;
 
-  // Native Bridge 없으면 판단 불가 — flag 만 유지
   if (!hasNativeBridge || typeof AndroidBridge.getAppVersion !== 'function') return;
 
   var currentNative = '';
   try { currentNative = AndroidBridge.getAppVersion(); } catch(e) { return; }
   if (!currentNative) return;
 
-  // BuildConfig.VERSION_NAME 기준 비교 (authoritative)
   if (currentNative === expecting) {
-    // 실제로 APK 가 업데이트 됨
-    showToast('✅ v' + expecting + ' 으로 업데이트 완료');
+    showToast('v' + expecting + ' 으로 업데이트 완료');
     installOutcomeShown = true;
     clearInstallExpectation();
     return;
   }
 
-  // 아직 업데이트 안 됨 → 취소 또는 실패.
-  //   - ts 가 없으면(레거시 상태) 즉시 플래그 정리 (데드락 방지)
-  //   - 10초 이상 경과 시: "완료되지 않음" UI 즉시 표시
-  //     (사용자가 "설치할 수 없습니다" 메시지 보고 바로 돌아오는 경우 대응)
   if (!ts) {
     clearInstallExpectation();
     return;
   }
   if ((Date.now() - ts) > 10000) {
+    var card = document.getElementById('app-update-status-card');
+    if (card) card.style.display = 'block';
     var panelEl = document.getElementById('app-install-failed');
     if (panelEl) panelEl.style.display = 'block';
     var availEl = document.getElementById('app-update-available');
     if (availEl) availEl.style.display = 'none';
-    // 문구 부드럽게 (취소한 경우도 있어 "실패" 단정 X)
-    var titleEl = panelEl ? panelEl.querySelector('div') : null;
-    if (titleEl) titleEl.innerHTML = '⚠️ 업데이트가 완료되지 않았습니다';
     installOutcomeShown = true;
     clearInstallExpectation();
   }
@@ -2804,10 +2894,8 @@ function clearInstallExpectation() {
   } catch(e) {}
 }
 
-// 기존 앱 삭제 후 재설치 플로우
 function uninstallAndReinstall() {
   if (!hasNativeBridge || typeof AndroidBridge.uninstallSelf !== 'function') {
-    // 브릿지 메서드 없는 버전 → 안내만
     alert('태블릿 설정 → 앱 → Sympotalk 런처 → 제거 후\n다시 앱 내 업데이트를 실행해주세요.');
     return;
   }
@@ -2816,7 +2904,6 @@ function uninstallAndReinstall() {
   }
 }
 
-// 페이지 가시성 변경 시 설치 결과 체크 (사용자가 설치 화면에서 돌아옴)
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible') {
     setTimeout(checkInstallOutcome, 500);
@@ -2824,11 +2911,9 @@ document.addEventListener('visibilitychange', function() {
 });
 
 /* ═══════════════════════════════════════════════════════
-   APP INFO LOADER — 상세 정보 한꺼번에 채우기
-   (APK 버전 / 웹 콘텐츠 / 환경 / Android / WebView / 프록시 / 체크시각)
+   APP INFO LOADER (보존)
 ═══════════════════════════════════════════════════════ */
 function loadAppInfo() {
-  // APK 버전 (네이티브)
   var apkEl = document.getElementById('info-apk-ver');
   if (apkEl) {
     if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
@@ -2838,12 +2923,9 @@ function loadAppInfo() {
     }
   }
 
-  // 실행 환경
   var envEl = document.getElementById('info-env');
   if (envEl) envEl.textContent = hasNativeBridge ? 'Android APK' : '웹 브라우저';
 
-  // 웹 콘텐츠 버전은 APK 와 다를 때만 노출 (핫패치 된 경우)
-  // 같으면 숨김 → 사용자가 "버전이 왜 두 개야?" 혼동 방지
   var contentEl = document.getElementById('info-content-ver');
   var hotpatchRow = document.getElementById('info-hotpatch-row');
   if (contentEl && hotpatchRow) {
@@ -2857,8 +2939,9 @@ function loadAppInfo() {
       var ok = (xhr.status === 200 || xhr.status === 0);
       if (!ok || !xhr.responseText) { hotpatchRow.style.display = 'none'; return; }
       var webVer = xhr.responseText.trim();
+      // 상단/설정 버전 동기화 (네이티브 없을 때 fallback)
+      syncVersionDisplay(webVer);
       if (webVer && nativeVer && webVer !== nativeVer) {
-        // 핫패치 상태: 웹은 이미 최신인데 APK 가 구버전 → 안내만 표시
         contentEl.textContent = 'v' + webVer;
         hotpatchRow.style.display = 'block';
       } else {
@@ -2869,7 +2952,6 @@ function loadAppInfo() {
     try { xhr.send(null); } catch(e) { hotpatchRow.style.display = 'none'; }
   }
 
-  // Android 버전 + WebView 버전 추출
   var ua = navigator.userAgent || '';
   var androidEl = document.getElementById('info-android');
   if (androidEl) {
@@ -2882,7 +2964,6 @@ function loadAppInfo() {
     wvEl.textContent = c ? 'Chrome ' + c[1].split('.')[0] : '(n/a)';
   }
 
-  // 프록시 캐시 상태 (X-Cache 헤더로 판단)
   var cacheEl = document.getElementById('info-proxy-cache');
   if (cacheEl) {
     cacheEl.textContent = '확인 중...';
@@ -2895,21 +2976,29 @@ function loadAppInfo() {
       .catch(function() { cacheEl.textContent = '연결 실패'; });
   }
 
-  // Supabase / GitHub — 상수에서 동적으로 주입 (하드코딩 방지)
   var supaEl = document.getElementById('info-supabase');
   if (supaEl) {
-    var m = SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/);
-    supaEl.textContent = m ? m[1] + '.supabase.co' : SUPABASE_URL;
+    var m2 = SUPABASE_URL.match(/https:\/\/([^.]+)\.supabase\.co/);
+    supaEl.textContent = m2 ? m2[1] + '.supabase.co' : SUPABASE_URL;
   }
   var ghEl = document.getElementById('info-github');
   if (ghEl) ghEl.textContent = GITHUB_REPO;
 }
 
+/** topbar + settings 의 버전 표기를 동일 값으로 동기화 */
+function syncVersionDisplay(versionStr) {
+  if (!versionStr) return;
+  var tb = document.getElementById('topbar-version');
+  var sv = document.getElementById('settings-version-num');
+  if (tb) tb.textContent = 'v' + versionStr;
+  if (sv) sv.innerHTML = escHtml(versionStr) + '<small>installed</small>';
+}
+
 /* ═══════════════════════════════════════════════════════
-   UTILS
+   UTILS (보존)
 ═══════════════════════════════════════════════════════ */
 function escHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -2917,8 +3006,6 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// HTML 속성 내에 JSON 인라인할 때 사용 (onclick="fn(payload)")
-// &/"/' 모두 엔티티화 — 이름에 &, ' 포함돼도 파싱 안전
 function escAttr(obj) {
   return JSON.stringify(obj)
     .replace(/&/g, '&amp;')
@@ -2935,25 +3022,22 @@ function copyText(elementId, btn) {
   textarea.select();
   try {
     document.execCommand('copy');
-    btn.textContent = '복사됨!';
-    btn.classList.add('copied');
-    setTimeout(function() {
-      btn.textContent = '복사';
-      btn.classList.remove('copied');
-    }, 2000);
+    btn.textContent = '복사됨';
+    setTimeout(function() { btn.textContent = '복사'; }, 2000);
   } catch(e) {}
   document.body.removeChild(textarea);
 }
 
 function showToast(msg) {
   var toast = document.getElementById('save-toast');
-  toast.textContent = '✅ ' + msg;
+  if (!toast) return;
+  toast.textContent = msg;
   toast.classList.add('show');
   setTimeout(function() { toast.classList.remove('show'); }, 2500);
 }
 
 /* ═══════════════════════════════════════════════════════
-   SERVICE WORKER
+   SERVICE WORKER (보존)
 ═══════════════════════════════════════════════════════ */
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -2965,29 +3049,40 @@ function registerServiceWorker() {
    INIT
 ═══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function() {
-  checkPreviousSession();   // 이전 세션 비정상 종료 여부 확인
-  startSession();           // 새 세션 플래그 세우기
+  // ── 보존: 세션 + 로그 + SW + loadEvents ──
+  checkPreviousSession();
+  startSession();
   SympotalkLog.push('info', '앱 시작', '런처가 정상적으로 실행됐습니다.');
   registerServiceWorker();
   loadEvents();
   startSWKeepalive();
-  // 행사 목록 자동 갱신 제거 (v1.0.31+) — 사용자가 새로고침 버튼으로만 갱신
 
-  // 앱 시작 시 설치 결과 체크 (APK 재시작 후 localStorage 기반)
   setTimeout(checkInstallOutcome, 800);
 
-  // 헤더 우측 버전 표기 (네이티브 버전)
+  // 헤더 우측 버전 표기 (네이티브 우선, 없으면 version.txt 가 loadAppInfo 에서 채움)
   var tbVer = document.getElementById('topbar-version');
   if (tbVer) {
     if (hasNativeBridge && typeof AndroidBridge.getAppVersion === 'function') {
-      try { tbVer.textContent = 'v' + AndroidBridge.getAppVersion(); } catch(e) { tbVer.textContent = 'v-'; }
+      try {
+        var v = AndroidBridge.getAppVersion();
+        tbVer.textContent = 'v' + v;
+        var sv = document.getElementById('settings-version-num');
+        if (sv) sv.innerHTML = escHtml(v) + '<small>installed</small>';
+      } catch(e) { tbVer.textContent = 'v1.1.0'; }
     } else {
       tbVer.textContent = 'web';
     }
   }
 
-  // ═══ 가상키보드 상태 전역 감지 (visualViewport API) ═══
-  // keyboard-open 클래스를 body 에 토글 → CSS 로 모달 위치 조정
+  // 빌드 라인 (정적)
+  var bv = document.getElementById('settings-version-build');
+  if (bv) {
+    var today = new Date();
+    var dateStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    bv.textContent = dateStr + ' · com.sympotalk.launcher';
+  }
+
+  // ── 가상키보드 상태 전역 감지 ──
   function syncKeyboardState() {
     var vv = window.visualViewport;
     if (!vv) return;
@@ -3005,14 +3100,11 @@ document.addEventListener('DOMContentLoaded', function() {
     window.visualViewport.addEventListener('scroll', syncKeyboardState);
   }
 
-  // 입력칸 포커스 시 스크롤 + 모달이면 상단 정렬 전환
   document.addEventListener('focusin', function(e) {
     var tag = (e.target && e.target.tagName) || '';
     if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
-    // 모달 내부 입력이면 모달에 kb-visible 클래스 추가 (상단 정렬)
     var modal = e.target.closest('#default-pw-modal, #wifi-password-modal');
     if (modal) modal.classList.add('kb-visible');
-    // 키보드 애니메이션 후 입력칸을 화면 중앙으로
     setTimeout(function() {
       try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       catch(ex) { try { e.target.scrollIntoView(); } catch(_) {} }
@@ -3025,36 +3117,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (modal) modal.classList.remove('kb-visible');
   });
 
-  // 버전 표시 (version.txt 동적 로드)
-  // WebView fetch는 file:// 프로토콜 미지원 → XMLHttpRequest 사용
+  // version.txt 로드 (settings + topbar 버전 동기화)
   loadAppInfo();
 
-  // 뒤로가기로 돌아왔을 때 마지막 행사 상세 자동 복원 (외부 URL → 런처 복귀)
-  try {
-    var lastEventStr = sessionStorage.getItem('last_event');
-    if (lastEventStr) {
-      var lastEvent = JSON.parse(lastEventStr);
-      sessionStorage.removeItem('last_event');
-      setTimeout(function() { openEventDetail(lastEvent); }, 300);
-    }
-  } catch(e) {}
+  // 외부 URL 에서 돌아왔을 때 — 마지막 행사로 복귀 (4-tab 모델: 같은 home 유지)
+  // (디테일 뷰가 사라졌으므로 별도 처리 없이 home 만 유지)
 
-  // Back 버튼 long-press 로 런처 재로드 된 경우: 마지막 본 행사 상세로 자동 이동
+  // Back long-press 복귀: 4-tab 모델에서는 home 유지 + 토스트만
   try {
     if (hasNativeBridge && typeof AndroidBridge.consumeLongPressReturn === 'function'
         && AndroidBridge.consumeLongPressReturn()) {
-      var persisted = localStorage.getItem('last_event_detail');
-      if (persisted) {
-        setTimeout(function() {
-          try {
-            var ev = JSON.parse(persisted);
-            openEventDetail(ev);
-            showToast('↩ 행사 상세로 돌아왔습니다');
-          } catch(e) {}
-        }, 400);
-      } else {
-        showToast('최근 본 행사가 없습니다 — 행사 목록으로 이동');
-      }
+      showToast('홈 화면으로 돌아왔습니다');
     }
   } catch(e) {}
 
@@ -3067,8 +3140,27 @@ document.addEventListener('DOMContentLoaded', function() {
     enableNoSleep();
     document.removeEventListener('click', onFirstClick);
   }, { once: true });
-});
 
+  // ── Segmented control (HOME) ──
+  var segs = document.querySelectorAll('.seg-btn');
+  for (var i = 0; i < segs.length; i++) {
+    segs[i].addEventListener('click', function() {
+      var tab = this.getAttribute('data-tab');
+      for (var j = 0; j < segs.length; j++) segs[j].classList.remove('active');
+      this.classList.add('active');
+      document.getElementById('pane-ongoing').style.display = (tab === 'ongoing') ? '' : 'none';
+      document.getElementById('pane-ended').style.display   = (tab === 'ended')   ? '' : 'none';
+    });
+  }
+
+  // ── Modal backdrop 클릭으로 닫기 (룸 피커만) ──
+  var rp = document.getElementById('m-room-picker');
+  if (rp) {
+    rp.addEventListener('click', function(e) {
+      if (e.target === this) this.classList.remove('show');
+    });
+  }
+});
 </script>
 </body>
 </html>
