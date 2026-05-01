@@ -180,14 +180,14 @@ input { font: inherit; }
   background: var(--bg-surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
 }
 .event-card[data-status="ended"] { opacity: 0.55; }
 
 .event-header {
   display: flex; align-items: center; gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .event-status-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -202,22 +202,22 @@ input { font: inherit; }
 .event-status-dot[data-status="ended"]    { background: var(--text-disabled); }
 
 .event-name {
-  flex: 1; font: 700 22px/1.2 sans-serif;
-  letter-spacing: -0.5px; color: var(--text-1);
+  flex: 1; font: 700 17px/1.2 sans-serif;
+  letter-spacing: -0.3px; color: var(--text-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.event-time {
-  font: 500 12px/1 sans-serif; color: var(--text-3);
-  flex-shrink: 0;
-}
 
-.event-meta {
-  display: flex; gap: var(--space-4); flex-wrap: wrap;
-  font: 500 13px/1.4 sans-serif; color: var(--text-2);
-  margin-bottom: var(--space-4);
+/* 행사명 오른쪽 인라인 메타 (날짜·에이전시·담당자·업데이트) */
+.event-meta-inline {
+  display: flex; align-items: center; gap: var(--space-3);
+  flex-shrink: 0;
+  font: 500 11px/1 sans-serif; color: var(--text-3);
 }
-.event-meta-item { display: inline-flex; align-items: center; gap: 6px; }
-.event-meta-item svg { width: 13px; height: 13px; stroke: var(--text-3); fill: none; stroke-width: 2; }
+.event-meta-inline .event-meta-item { display: inline-flex; align-items: center; gap: 4px; }
+.event-meta-inline .event-meta-item svg { width: 11px; height: 11px; stroke: var(--text-3); fill: none; stroke-width: 2; flex-shrink: 0; }
+
+/* 구분자 */
+.event-meta-sep { color: var(--border-base); }
 
 /* ═══════════════════════════════════════════════════════
    ACTION ROW — 5버튼 한 줄
@@ -230,19 +230,19 @@ input { font: inherit; }
 @media (max-width: 420px) { .action-row { grid-template-columns: repeat(2, 1fr); } }
 
 .action-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-3);
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 0 var(--space-3);
   background: var(--bg-elevated);
   border: 1px solid var(--border-base);
   border-radius: var(--radius);
   color: var(--text-2);
-  font: 500 13px/1 sans-serif;
-  min-height: 92px;
+  font: 500 12px/1 sans-serif;
+  height: 44px;
   transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s, box-shadow 0.12s;
 }
 .action-btn svg {
-  width: 26px; height: 26px;
+  width: 18px; height: 18px; flex-shrink: 0;
   stroke: currentColor; fill: none; stroke-width: 1.5;
   stroke-linecap: round; stroke-linejoin: round;
 }
@@ -259,24 +259,24 @@ input { font: inherit; }
 .action-btn-attendee { position: relative; }
 .action-btn-attendee::before {
   content: '';
-  position: absolute; left: 0; top: 12px; bottom: 12px;
+  position: absolute; left: 0; top: 8px; bottom: 8px;
   width: 2px; background: var(--accent-border); border-radius: 0 2px 2px 0;
 }
 .action-btn-attendee:active::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 
 .multiroom-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-3);
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 0 var(--space-3);
   background: var(--bg-elevated);
   border: 1px dashed var(--border-base);
   border-radius: var(--radius);
-  color: var(--text-2); font: 500 13px/1 sans-serif;
-  min-height: 92px;
+  color: var(--text-2); font: 500 12px/1 sans-serif;
+  height: 44px;
   transition: all 0.12s;
 }
-.multiroom-btn svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.5; }
-.multiroom-btn .label { font: 600 13px/1 sans-serif; }
+.multiroom-btn svg { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.multiroom-btn .label { font: 600 12px/1 sans-serif; }
 .multiroom-btn .sub { font: 500 11px/1 sans-serif; color: var(--text-3); }
 .multiroom-btn:hover { border-color: var(--border-hover); border-style: solid; color: var(--text-1); }
 .multiroom-btn:active {
@@ -2032,19 +2032,21 @@ function buildEventCardsHtml(list, isEnded) {
     var updatedStr = formatRelativeTime(ev.updated_at);
     var evJson = escAttr(ev);
 
+    // 인라인 메타 (행사명 오른쪽)
+    var metaHtml =
+      '<span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + escHtml(dateStr) + '</span>' +
+      (ev.agency ? '<span class="event-meta-sep">·</span><span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>' + escHtml(ev.agency) + '</span>' : '') +
+      (ev.manager_name ? '<span class="event-meta-sep">·</span><span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' + escHtml(ev.manager_name) + '</span>' : '') +
+      (updatedStr ? '<span class="event-meta-sep">·</span><span class="event-meta-item">' + escHtml(updatedStr) + '</span>' : '');
+
     html += '<div class="event-card" data-status="' + (isEnded ? 'ended' : info.dotStatus) + '" data-event-id="' + escHtml(ev.id) + '">' +
       '<div class="event-header">' +
         '<span class="event-status-dot" data-status="' + (isEnded ? 'ended' : info.dotStatus) + '"></span>' +
         '<h3 class="event-name" onclick="trackCurrentEvent(' + evJson + ')">' + escHtml(ev.name) + '</h3>' +
-        (updatedStr ? '<span class="event-time">' + escHtml(updatedStr) + '</span>' : '') +
-      '</div>' +
-      '<div class="event-meta">' +
-        '<span class="event-meta-item"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + escHtml(dateStr) + '</span>' +
-        (ev.agency ? '<span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>' + escHtml(ev.agency) + '</span>' : '') +
-        (ev.manager_name ? '<span class="event-meta-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' + escHtml(ev.manager_name) + '</span>' : '') +
+        '<div class="event-meta-inline">' + metaHtml + '</div>' +
       '</div>' +
       '<div class="event-rooms-area" id="rooms-' + escHtml(ev.id) + '">' +
-        '<div style="font:500 12px/1 sans-serif;color:var(--text-3);padding:var(--space-3) 0">룸 정보 로드 중...</div>' +
+        '<div style="font:500 12px/1 sans-serif;color:var(--text-3);padding:4px 0">룸 정보 로드 중...</div>' +
       '</div>' +
     '</div>';
   }
@@ -2099,7 +2101,7 @@ function fillRoomActionRow(event, rooms) {
   var attendeeBtn =
     '<button class="action-btn action-btn-attendee" onclick="trackCurrentEvent(' + escAttr(event) + ');openLink(\'' + encodeURIComponent(attendeeUrl) + '\')">' +
       '<svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="10" y1="18" x2="14" y2="18"/></svg>' +
-      '참석자' +
+      '패드' +
     '</button>';
 
   if (!rooms || rooms.length === 0) {
@@ -2118,7 +2120,6 @@ function fillRoomActionRow(event, rooms) {
     var room = rooms[0];
     var btns = build5RoomButtons(event, room);
     area.innerHTML =
-      '<div class="section-label"><span class="name">' + escHtml(room.name || '룸') + '</span></div>' +
       '<div class="action-row">' +
         attendeeBtn +
         btns.console +
