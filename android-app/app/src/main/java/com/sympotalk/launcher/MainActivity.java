@@ -413,7 +413,6 @@ public class MainActivity extends AppCompatActivity {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             // 반복 이벤트(길게 눌러 자동 반복)·이미 타이머 대기 중이면 무시
             if (event.getRepeatCount() == 0 && backPressRunnable == null) {
-                Toast.makeText(this, "홈으로 가려면 3초간 누르세요", Toast.LENGTH_SHORT).show();
                 backPressRunnable = () -> {
                     backPressRunnable = null;
                     pendingLongPressReturn = true;
