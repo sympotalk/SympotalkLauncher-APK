@@ -11,6 +11,8 @@ import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.View;
@@ -41,6 +43,14 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean pendingLongPressReturn = false;   // Long-press BACK → 행사상세 복귀용
                                                                // volatile: main thread(onKeyLongPress)와
                                                                //          JS bridge thread(consumeLongPressReturn) 간 가시성 확보
+
+    // ── 뒤로가기 3초 롱프레스 타이머 ─────────────────────────────────────────
+    // event.startTracking()+onKeyLongPress 조합은 갤럭시탭·레노버 등 일부 기기에서
+    // 시스템이 KEYCODE_BACK long-press를 가로채 작동하지 않는 경우가 있음.
+    // → Handler.postDelayed 직접 타이머 방식으로 모든 기기 호환성 보장.
+    private final Handler backPressHandler = new Handler(Looper.getMainLooper());
+    private Runnable backPressRunnable = null;
+    private static final long BACK_LONG_PRESS_MS = 3000L;   // 3초
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -389,35 +399,50 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ── Back 버튼 동작 ─────────────────────────────────
-    // Short press: 무시 (사용자가 실수로 앱/페이지 이탈하는 것 방지)
-    // Long  press: 런처 재로드 + localStorage 기반 마지막 행사 상세로 이동
+    // ── Back 버튼 동작 ─────────────────────────────────────────────────────────
+    // Short press (< 3초): 무시 — 실수로 앱/페이지 이탈 방지
+    // Long  press (≥ 3초): 런처 재로드 + localStorage 기반 마지막 행사 상세로 이동
+    //
+    // 【기기 호환성】
+    //   event.startTracking() + onKeyLongPress() 조합은 갤럭시탭·레노버 IdeaTab 등에서
+    //   시스템이 KEYCODE_BACK long-press를 먼저 가로채 onKeyLongPress가 호출되지 않는 문제 있음.
+    //   → Handler.postDelayed 직접 타이머로 교체하여 LG G Pad 5·갤럭시탭·레노버 전 기기 대응.
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            event.startTracking();    // long press 추적 활성화
-            return true;              // down 이벤트 consume
+            // 반복 이벤트(길게 눌러 자동 반복)·이미 타이머 대기 중이면 무시
+            if (event.getRepeatCount() == 0 && backPressRunnable == null) {
+                Toast.makeText(this, "홈으로 가려면 3초간 누르세요", Toast.LENGTH_SHORT).show();
+                backPressRunnable = () -> {
+                    backPressRunnable = null;
+                    pendingLongPressReturn = true;
+                    // sympopad.com 등 외부 URL에 있을 수 있으므로 런처 HTML 재로드
+                    // Toast는 JS 쪽에 위임 — 행사 이력 유무에 따라 다른 메시지를 표시
+                    loadApp();
+                };
+                backPressHandler.postDelayed(backPressRunnable, BACK_LONG_PRESS_MS);
+            }
+            return true;   // down 이벤트 consume
         }
         return super.onKeyDown(keyCode, event);
     }
 
     @Override
     public boolean onKeyLongPress(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            pendingLongPressReturn = true;
-            // sympopad.com 등 외부 URL 에 있을 수 있으므로 런처 HTML 재로드
-            // Toast 는 JS 쪽에 위임 — 행사 이력 유무에 따라 다른 메시지를 표시하기 위함
-            runOnUiThread(this::loadApp);
-            return true;
-        }
+        // 직접 타이머 방식 사용 → 시스템 long-press 콜백은 무시
+        if (keyCode == KeyEvent.KEYCODE_BACK) return true;
         return super.onKeyLongPress(keyCode, event);
     }
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // Short press: 아무것도 안 함 (long press 는 이미 onKeyLongPress 에서 처리됨)
+            // 3초 전에 손을 떼면 타이머 취소 (short press → 무시)
+            if (backPressRunnable != null) {
+                backPressHandler.removeCallbacks(backPressRunnable);
+                backPressRunnable = null;
+            }
             return true;
         }
         return super.onKeyUp(keyCode, event);
@@ -425,7 +450,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        // 명시적 no-op — onKeyDown/Up 이 이벤트를 완전히 consume
+        // 명시적 no-op — onKeyDown/Up 타이머가 이벤트를 완전히 관리
+        // (제스처 네비게이션에서 swipe-back이 와도 즉각 반응하지 않도록 차단)
     }
 
     @Override
@@ -444,6 +470,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // 뒤로가기 타이머 정리 (메모리 누수 방지)
+        backPressHandler.removeCallbacksAndMessages(null);
+        backPressRunnable = null;
         if (webView != null) {
             webView.stopLoading();
             webView.clearHistory();
