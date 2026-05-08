@@ -47,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
     // ── 뒤로가기 2초 롱프레스 ────────────────────────────────────────────────
     private final Handler backPressHandler = new Handler(Looper.getMainLooper());
     private Runnable backPressRunnable = null;
-    private static final long BACK_LONG_PRESS_MS = 2000L;
+    private static final long BACK_LONG_PRESS_MS = 1000L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
