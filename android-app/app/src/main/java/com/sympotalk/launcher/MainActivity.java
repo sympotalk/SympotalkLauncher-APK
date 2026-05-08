@@ -1,9 +1,6 @@
 package com.sympotalk.launcher;
 
 import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -17,14 +14,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
-import android.view.animation.LinearInterpolator;
 import android.webkit.*;
-import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import java.net.InetAddress;
@@ -50,14 +44,10 @@ public class MainActivity extends AppCompatActivity {
                                                                // volatile: main thread(onKeyLongPress)와
                                                                //          JS bridge thread(consumeLongPressReturn) 간 가시성 확보
 
-    // ── 뒤로가기 3초 롱프레스 ────────────────────────────────────────────────
+    // ── 뒤로가기 2초 롱프레스 ────────────────────────────────────────────────
     private final Handler backPressHandler = new Handler(Looper.getMainLooper());
     private Runnable backPressRunnable = null;
-    private static final long BACK_LONG_PRESS_MS = 3000L;
-
-    // ── 진행 바 (뒤로가기 누르는 동안 하단에 표시되는 초록색 바) ──────────────
-    private View backProgressBar;
-    private ObjectAnimator backProgressAnimator;
+    private static final long BACK_LONG_PRESS_MS = 2000L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,29 +66,9 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.parseColor("#0f172a"));
         getWindow().setNavigationBarColor(Color.parseColor("#0f172a"));
 
-        // WebView + 진행 바를 FrameLayout에 담아 contentView로 설정
-        FrameLayout container = new FrameLayout(this);
-
         webView = new WebView(this);
         webView.setBackgroundColor(Color.parseColor("#0f172a"));
-        container.addView(webView, new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT));
-
-        // 뒤로가기 진행 바: 3초 동안 왼→오른 방향으로 채워지는 초록 바
-        backProgressBar = new View(this);
-        backProgressBar.setBackgroundColor(Color.parseColor("#00FF00"));
-        int barH = Math.round(6 * getResources().getDisplayMetrics().density);
-        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, barH);
-        barLp.gravity = Gravity.BOTTOM;
-        backProgressBar.setLayoutParams(barLp);
-        backProgressBar.setScaleX(0f);
-        backProgressBar.setPivotX(0f);  // 왼쪽에서 채워짐
-        backProgressBar.setVisibility(View.INVISIBLE);
-        container.addView(backProgressBar);
-
-        setContentView(container);
+        setContentView(webView);
 
         wifiHelper = new WifiHelper(this);
         appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
@@ -437,58 +407,28 @@ public class MainActivity extends AppCompatActivity {
 
     // ── Back 버튼 ─────────────────────────────────────────────────────────────
     // dispatchKeyEvent: WebView보다 먼저 호출 → WebView가 BACK을 소비해도 안전
-    // 진행 바: 누르는 순간 왼→오른 3초 애니메이션 → 3초 완료 시 인덱스 로드
-    //          손을 떼면 바가 사라지고 취소 (짧은 탭 = 아무 동작 없음)
+    // 짧은 탭: 아무 동작 없음 (실수 방지)
+    // 2초 롱프레스: 인덱스 로드
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0
                     && backPressRunnable == null) {
-                // 진행 바 시작
-                showBackProgress();
-                // 3초 후 인덱스 로드
                 backPressRunnable = () -> {
                     backPressRunnable = null;
-                    hideBackProgress();
                     pendingLongPressReturn = true;
                     loadApp();
                 };
                 backPressHandler.postDelayed(backPressRunnable, BACK_LONG_PRESS_MS);
             } else if (event.getAction() == KeyEvent.ACTION_UP
                     && backPressRunnable != null) {
-                // 손을 떼면 취소
                 backPressHandler.removeCallbacks(backPressRunnable);
                 backPressRunnable = null;
-                hideBackProgress();
             }
             return true;
         }
         return super.dispatchKeyEvent(event);
-    }
-
-    /** 뒤로가기 진행 바 표시 + 3초 채우기 애니메이션 */
-    private void showBackProgress() {
-        if (backProgressBar == null) return;
-        if (backProgressAnimator != null) backProgressAnimator.cancel();
-        backProgressBar.setScaleX(0f);
-        backProgressBar.setVisibility(View.VISIBLE);
-        backProgressAnimator = ObjectAnimator.ofFloat(backProgressBar, "scaleX", 0f, 1f);
-        backProgressAnimator.setDuration(BACK_LONG_PRESS_MS);
-        backProgressAnimator.setInterpolator(new LinearInterpolator());
-        backProgressAnimator.start();
-    }
-
-    /** 뒤로가기 진행 바 숨김 + 초기화 */
-    private void hideBackProgress() {
-        if (backProgressAnimator != null) {
-            backProgressAnimator.cancel();
-            backProgressAnimator = null;
-        }
-        if (backProgressBar != null) {
-            backProgressBar.setVisibility(View.INVISIBLE);
-            backProgressBar.setScaleX(0f);
-        }
     }
 
     @Override
@@ -522,14 +462,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // 뒤로가기 타이머 + 애니메이터 정리 (메모리 누수 방지)
+        // 뒤로가기 타이머 정리 (메모리 누수 방지)
         backPressHandler.removeCallbacksAndMessages(null);
         backPressRunnable = null;
-        if (backProgressAnimator != null) {
-            backProgressAnimator.cancel();
-            backProgressAnimator = null;
-        }
-        backProgressBar = null;
         if (webView != null) {
             webView.stopLoading();
             webView.clearHistory();
