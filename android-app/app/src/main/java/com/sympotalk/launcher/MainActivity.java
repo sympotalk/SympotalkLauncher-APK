@@ -408,49 +408,47 @@ public class MainActivity extends AppCompatActivity {
     //   시스템이 KEYCODE_BACK long-press를 먼저 가로채 onKeyLongPress가 호출되지 않는 문제 있음.
     //   → Handler.postDelayed 직접 타이머로 교체하여 LG G Pad 5·갤럭시탭·레노버 전 기기 대응.
 
+    // ── Back 버튼 — dispatchKeyEvent 에서 WebView보다 먼저 가로채기 ────────────
+    // 키 이벤트 전달 순서: dispatchKeyEvent → WebView(포커스뷰) → onKeyDown
+    // WebView가 BACK을 소비하면 onKeyDown이 아예 호출되지 않으므로
+    // dispatchKeyEvent 에서 직접 처리해야 모든 기기에서 동작 보장.
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // 반복 이벤트(길게 눌러 자동 반복)·이미 타이머 대기 중이면 무시
-            if (event.getRepeatCount() == 0 && backPressRunnable == null) {
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                    && event.getRepeatCount() == 0
+                    && backPressRunnable == null) {
                 backPressRunnable = () -> {
                     backPressRunnable = null;
                     pendingLongPressReturn = true;
-                    // sympopad.com 등 외부 URL에 있을 수 있으므로 런처 HTML 재로드
-                    // Toast는 JS 쪽에 위임 — 행사 이력 유무에 따라 다른 메시지를 표시
                     loadApp();
                 };
                 backPressHandler.postDelayed(backPressRunnable, BACK_LONG_PRESS_MS);
+            } else if (event.getAction() == KeyEvent.ACTION_UP
+                    && backPressRunnable != null) {
+                backPressHandler.removeCallbacks(backPressRunnable);
+                backPressRunnable = null;
             }
-            return true;   // down 이벤트 consume
+            return true;  // WebView·시스템 모두 차단
         }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // BACK은 dispatchKeyEvent에서 이미 처리 — 여기까지 오지 않음
         return super.onKeyDown(keyCode, event);
     }
 
     @Override
-    public boolean onKeyLongPress(int keyCode, KeyEvent event) {
-        // 직접 타이머 방식 사용 → 시스템 long-press 콜백은 무시
-        if (keyCode == KeyEvent.KEYCODE_BACK) return true;
-        return super.onKeyLongPress(keyCode, event);
-    }
-
-    @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // 3초 전에 손을 떼면 타이머 취소 (short press → 무시)
-            if (backPressRunnable != null) {
-                backPressHandler.removeCallbacks(backPressRunnable);
-                backPressRunnable = null;
-            }
-            return true;
-        }
+        // BACK은 dispatchKeyEvent에서 이미 처리 — 여기까지 오지 않음
         return super.onKeyUp(keyCode, event);
     }
 
     @Override
     public void onBackPressed() {
-        // 명시적 no-op — onKeyDown/Up 타이머가 이벤트를 완전히 관리
-        // (제스처 네비게이션에서 swipe-back이 와도 즉각 반응하지 않도록 차단)
+        // 명시적 no-op — dispatchKeyEvent 가 BACK을 완전히 관리
     }
 
     @Override
