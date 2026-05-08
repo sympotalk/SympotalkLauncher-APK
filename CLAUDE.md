@@ -157,7 +157,7 @@ gh release view v1.0.43       # 배포된 릴리스 확인
 - **커밋 메시지**: Conventional Commits + 한국어 + 버전 suffix.
   - 예: `feat: 비정상 종료 감지 + 태블릿 레이아웃 꽉참 (v1.0.43)`
   - 타입: `feat:` `fix:` `chore:` `refactor:` `docs:`
-- **버전 동기화 (필수)**: `version.txt` ↔ `android-app/app/build.gradle` (versionName + versionCode bump). CI가 일치 검증.
+- **버전 동기화 (필수)**: `version.txt` ↔ `android-app/app/build.gradle` (versionName + versionCode bump). CI가 일치 검증. → **아래 §11 버전 규칙 참조**.
 - **자동 감사 규칙**: 기능 추가/리팩터링/버전 bump 후 **커밋 전** `general-purpose` 서브에이전트로 코드 감사. 감사는 리포트만, 코드 수정은 본 세션. (`memory/feedback_auto_audit.md`)
 - **백업 우선**: 기존 파일 덮어쓸 때는 `.backup` 확장자.
 
@@ -204,3 +204,45 @@ P0는 현재 없음.
 | `/rollback` | 직전 안정 버전으로 롤백 + incident 기록 |
 
 **새 세션 시작 시 권장**: `/init-context` 실행하여 최근 세션 로그/이슈/커밋을 자동으로 복원.
+
+---
+
+## 11. 버전 규칙 ⚠️ (반드시 읽기)
+
+CI(`build-and-deploy.yml`)가 **`version.txt` == `build.gradle` versionName** 을 검사합니다.
+두 값이 다르면 빌드가 즉시 실패합니다.
+
+### 무조건 같이 올려야 하는 파일 3개
+
+```
+version.txt                          ← 웹 콘텐츠 업데이트 트리거 (앱이 이 값 비교)
+android-app/app/build.gradle         ← versionName + versionCode (APK 버전)
+```
+
+| 변경 종류 | version.txt | versionCode | 비고 |
+|---|---|---|---|
+| `index.html` / `sw.js` / `manifest.json` 변경 | ✅ 올림 | ✅ 올림 | 웹+APK 동시 |
+| Java / Gradle 변경 (기능·버그픽스) | ✅ 올림 | ✅ 올림 | 웹+APK 동시 |
+| 문서·주석·설정만 변경 | 유지 가능 | 유지 가능 | CI 버전 체크 통과 |
+
+### 버전 번호 규칙
+
+```
+versionName: MAJOR.MINOR.PATCH   예) 1.1.4
+versionCode: 숫자만 +1           예) 44
+```
+
+- **PATCH** (+0.0.1): 버그픽스, 소규모 개선
+- **MINOR** (+0.1.0): 기능 추가, UI 개편
+- **MAJOR** (+1.0.0): 대규모 재설계
+
+### 체크리스트 (커밋 전)
+
+```bash
+# 두 값이 같은지 확인
+cat version.txt
+grep versionName android-app/app/build.gradle
+```
+
+> ⚠️ **자주 실수하는 패턴**: Java만 고치고 version.txt를 올리지 않거나,
+> index.html만 고치고 build.gradle을 올리지 않는 경우. **항상 3개 동시 수정.**
