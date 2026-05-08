@@ -412,6 +412,12 @@ public class MainActivity extends AppCompatActivity {
     // 키 이벤트 전달 순서: dispatchKeyEvent → WebView(포커스뷰) → onKeyDown
     // WebView가 BACK을 소비하면 onKeyDown이 아예 호출되지 않으므로
     // dispatchKeyEvent 에서 직접 처리해야 모든 기기에서 동작 보장.
+    //
+    // 【ACTION_UP 취소 제거 이유】
+    //  LG·Samsung 등 일부 기기는 BACK 을 1~2초 이상 누르면
+    //  시스템이 물리 버튼 해제 전에 ACTION_UP 을 먼저 발송 (시스템 장기누름 처리).
+    //  ACTION_UP 에서 타이머를 취소하면 3초 전에 항상 중단됨.
+    //  → ACTION_UP 은 무시하고, 한 번 누르면 3초 후 반드시 실행.
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
@@ -424,11 +430,8 @@ public class MainActivity extends AppCompatActivity {
                     loadApp();
                 };
                 backPressHandler.postDelayed(backPressRunnable, BACK_LONG_PRESS_MS);
-            } else if (event.getAction() == KeyEvent.ACTION_UP
-                    && backPressRunnable != null) {
-                backPressHandler.removeCallbacks(backPressRunnable);
-                backPressRunnable = null;
             }
+            // ACTION_UP 은 의도적으로 무시 — 시스템이 손 떼기 전에 UP 을 보내는 기기 대응
             return true;  // WebView·시스템 모두 차단
         }
         return super.dispatchKeyEvent(event);
