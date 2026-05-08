@@ -1,6 +1,9 @@
 package com.sympotalk.launcher;
 
 import android.Manifest;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -14,11 +17,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
 import android.webkit.*;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import java.net.InetAddress;
@@ -44,13 +50,14 @@ public class MainActivity extends AppCompatActivity {
                                                                // volatile: main thread(onKeyLongPress)와
                                                                //          JS bridge thread(consumeLongPressReturn) 간 가시성 확보
 
-    // ── 뒤로가기 3초 롱프레스 타이머 ─────────────────────────────────────────
-    // event.startTracking()+onKeyLongPress 조합은 갤럭시탭·레노버 등 일부 기기에서
-    // 시스템이 KEYCODE_BACK long-press를 가로채 작동하지 않는 경우가 있음.
-    // → Handler.postDelayed 직접 타이머 방식으로 모든 기기 호환성 보장.
+    // ── 뒤로가기 3초 롱프레스 ────────────────────────────────────────────────
     private final Handler backPressHandler = new Handler(Looper.getMainLooper());
     private Runnable backPressRunnable = null;
-    private static final long BACK_LONG_PRESS_MS = 3000L;   // 3초
+    private static final long BACK_LONG_PRESS_MS = 3000L;
+
+    // ── 진행 바 (뒤로가기 누르는 동안 하단에 표시되는 초록색 바) ──────────────
+    private View backProgressBar;
+    private ObjectAnimator backProgressAnimator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,10 +76,29 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.parseColor("#0f172a"));
         getWindow().setNavigationBarColor(Color.parseColor("#0f172a"));
 
-        // WebView를 직접 contentView로 설정
+        // WebView + 진행 바를 FrameLayout에 담아 contentView로 설정
+        FrameLayout container = new FrameLayout(this);
+
         webView = new WebView(this);
         webView.setBackgroundColor(Color.parseColor("#0f172a"));
-        setContentView(webView);
+        container.addView(webView, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+
+        // 뒤로가기 진행 바: 3초 동안 왼→오른 방향으로 채워지는 초록 바
+        backProgressBar = new View(this);
+        backProgressBar.setBackgroundColor(Color.parseColor("#00FF00"));
+        int barH = Math.round(6 * getResources().getDisplayMetrics().density);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, barH);
+        barLp.gravity = Gravity.BOTTOM;
+        backProgressBar.setLayoutParams(barLp);
+        backProgressBar.setScaleX(0f);
+        backProgressBar.setPivotX(0f);  // 왼쪽에서 채워짐
+        backProgressBar.setVisibility(View.INVISIBLE);
+        container.addView(backProgressBar);
+
+        setContentView(container);
 
         wifiHelper = new WifiHelper(this);
         appUpdateManager = new AppUpdateManager(this, BuildConfig.GITHUB_REPO);
@@ -331,8 +357,9 @@ public class MainActivity extends AppCompatActivity {
             // 다운로드된 최신 버전 로드
             webView.loadUrl("file://" + updatedFile.getAbsolutePath());
         } else {
-            // 앱 번들 기본 버전 로드
-            webView.loadUrl("file:///android_asset/www/index.html");
+            // 다운로드 파일 없음(첫 실행·다운로드 전) → Cloudflare URL 직접 로드
+            // assets/www/ 는 번들 없이 비어있으므로 반드시 원격 URL 폴백 필요
+            webView.loadUrl(BuildConfig.CLOUDFLARE_URL);
         }
     }
 
@@ -408,50 +435,75 @@ public class MainActivity extends AppCompatActivity {
     //   시스템이 KEYCODE_BACK long-press를 먼저 가로채 onKeyLongPress가 호출되지 않는 문제 있음.
     //   → Handler.postDelayed 직접 타이머로 교체하여 LG G Pad 5·갤럭시탭·레노버 전 기기 대응.
 
-    // ── Back 버튼 — dispatchKeyEvent 에서 WebView보다 먼저 가로채기 ────────────
-    // 키 이벤트 전달 순서: dispatchKeyEvent → WebView(포커스뷰) → onKeyDown
-    // WebView가 BACK을 소비하면 onKeyDown이 아예 호출되지 않으므로
-    // dispatchKeyEvent 에서 직접 처리해야 모든 기기에서 동작 보장.
-    //
-    // 【ACTION_UP 취소 제거 이유】
-    //  LG·Samsung 등 일부 기기는 BACK 을 1~2초 이상 누르면
-    //  시스템이 물리 버튼 해제 전에 ACTION_UP 을 먼저 발송 (시스템 장기누름 처리).
-    //  ACTION_UP 에서 타이머를 취소하면 3초 전에 항상 중단됨.
-    //  → ACTION_UP 은 무시하고, 한 번 누르면 3초 후 반드시 실행.
+    // ── Back 버튼 ─────────────────────────────────────────────────────────────
+    // dispatchKeyEvent: WebView보다 먼저 호출 → WebView가 BACK을 소비해도 안전
+    // 진행 바: 누르는 순간 왼→오른 3초 애니메이션 → 3초 완료 시 인덱스 로드
+    //          손을 떼면 바가 사라지고 취소 (짧은 탭 = 아무 동작 없음)
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getRepeatCount() == 0
                     && backPressRunnable == null) {
+                // 진행 바 시작
+                showBackProgress();
+                // 3초 후 인덱스 로드
                 backPressRunnable = () -> {
                     backPressRunnable = null;
+                    hideBackProgress();
                     pendingLongPressReturn = true;
                     loadApp();
                 };
                 backPressHandler.postDelayed(backPressRunnable, BACK_LONG_PRESS_MS);
+            } else if (event.getAction() == KeyEvent.ACTION_UP
+                    && backPressRunnable != null) {
+                // 손을 떼면 취소
+                backPressHandler.removeCallbacks(backPressRunnable);
+                backPressRunnable = null;
+                hideBackProgress();
             }
-            // ACTION_UP 은 의도적으로 무시 — 시스템이 손 떼기 전에 UP 을 보내는 기기 대응
-            return true;  // WebView·시스템 모두 차단
+            return true;
         }
         return super.dispatchKeyEvent(event);
     }
 
+    /** 뒤로가기 진행 바 표시 + 3초 채우기 애니메이션 */
+    private void showBackProgress() {
+        if (backProgressBar == null) return;
+        if (backProgressAnimator != null) backProgressAnimator.cancel();
+        backProgressBar.setScaleX(0f);
+        backProgressBar.setVisibility(View.VISIBLE);
+        backProgressAnimator = ObjectAnimator.ofFloat(backProgressBar, "scaleX", 0f, 1f);
+        backProgressAnimator.setDuration(BACK_LONG_PRESS_MS);
+        backProgressAnimator.setInterpolator(new LinearInterpolator());
+        backProgressAnimator.start();
+    }
+
+    /** 뒤로가기 진행 바 숨김 + 초기화 */
+    private void hideBackProgress() {
+        if (backProgressAnimator != null) {
+            backProgressAnimator.cancel();
+            backProgressAnimator = null;
+        }
+        if (backProgressBar != null) {
+            backProgressBar.setVisibility(View.INVISIBLE);
+            backProgressBar.setScaleX(0f);
+        }
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // BACK은 dispatchKeyEvent에서 이미 처리 — 여기까지 오지 않음
         return super.onKeyDown(keyCode, event);
     }
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        // BACK은 dispatchKeyEvent에서 이미 처리 — 여기까지 오지 않음
         return super.onKeyUp(keyCode, event);
     }
 
     @Override
     public void onBackPressed() {
-        // 명시적 no-op — dispatchKeyEvent 가 BACK을 완전히 관리
+        // no-op — dispatchKeyEvent 가 BACK 완전 관리
     }
 
     @Override
@@ -470,9 +522,14 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // 뒤로가기 타이머 정리 (메모리 누수 방지)
+        // 뒤로가기 타이머 + 애니메이터 정리 (메모리 누수 방지)
         backPressHandler.removeCallbacksAndMessages(null);
         backPressRunnable = null;
+        if (backProgressAnimator != null) {
+            backProgressAnimator.cancel();
+            backProgressAnimator = null;
+        }
+        backProgressBar = null;
         if (webView != null) {
             webView.stopLoading();
             webView.clearHistory();
