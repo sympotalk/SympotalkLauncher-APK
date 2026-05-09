@@ -1,3 +1,99 @@
+## Final Logic Check (5차 — 2026-05-08 정적 QA 재검토 및 재업로드)
+
+클로드코드와 GPT 피드백을 반영한 기존 리포트를 코드베이스와 대조해 다시 검토했다. 이번 검토는 구현을 바로 수정한 것이 아니라, **문서 최상단에 최종 설계 보완점과 작업 우선순위를 남기는 정적 QA 정리**다.
+
+> 재업로드 확인: 이 섹션은 이전 4차 정적 QA 요약을 기준으로, GitHub 업로드 누락이 없도록 검토 범위·핵심 결론·우선순위·최종 판단을 한 번 더 명시적으로 정리한 최종본이다.
+
+### 검토 범위
+
+| 범위 | 확인 내용 |
+|------|----------|
+| `docs/auto-update-report.md` | 자동 APK 업데이트 설계, DPC 구조, rollback, manifest, retry/backoff 문구 재검토 |
+| `AppUpdateManager.java` | GitHub Releases 조회, 60분 캐시, DownloadManager 기반 APK 수동 설치 흐름 확인 |
+| `UpdateManager.java` | HttpURLConnection 기반 웹 콘텐츠 다운로드, `.tmp` 파일 사용, version.txt 비교 로직 확인 |
+| `MainActivity.java` | WebView 로드 순서, JS bridge, 앱/웹 업데이트 트리거 위치 확인 |
+| `.github/workflows/build-and-deploy.yml` | 현재 APK 빌드·Release 업로드 절차와 sha256/manifest 생성 누락 여부 확인 |
+
+### 핵심 결론
+
+| # | 발견 항목 | 영향 | 최종 조치 방향 |
+|---|----------|------|----------------|
+| 1 | `.tmp → delete → renameTo()` 패턴은 실제 atomic 교체가 아님 | rename 실패 시 정상 파일 손실 가능 | `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)` + 실패 검증으로 변경 필요 |
+| 2 | 웹 콘텐츠 rollback에 파일별 hash·버전 고정 URL이 없음 | APK와 web content 혼합 버전 로드 가능 | `webFiles[]`/`lastKnownGoodWebFiles[]`와 staging 검증 절차 추가 필요 |
+| 3 | `PackageInstaller` 실패 코드 매핑이 고수준 status에 과의존 | downgrade/signature/SDK/ABI 원인 오진 가능 | `EXTRA_STATUS_MESSAGE`, legacy status, 사전 검증 결과를 함께 기록 |
+| 4 | DPC와 Launcher 동일 keystore를 “필수”로 단정 | 보안 키 blast radius 증가, 실제 DO 설치 조건과 혼동 | DPC 별도 keystore + Launcher signing certificate pinning 권장 |
+| 5 | IPC 설명이 read-only와 report API 사이에서 충돌 | Launcher report 위조/오동작 시 rollback 판단 왜곡 | query API와 report API 분리, caller UID/package 검증 추가 |
+| 6 | crash rollback이 Launcher report에 의존 | cold-start crash/OOM/ANR 감지 누락 가능 | DPC 주도 health watchdog + startup marker 추가 |
+| 7 | Manifest 서버 필요성이 문서 내에서 P0와 “수백 대 이상 검토”로 충돌 | DPC 자동 업데이트 필수 데이터 출처가 모호 | DPC 자동 업데이트에서는 Manifest 서버를 P0 필수로 정리 |
+| 8 | Worker 예시가 sha256/versionCode를 release JSON만으로 만든다고 가정 | 부정확한 manifest 생성 가능 | CI에서 sha256/versionCode/update-manifest artifact 생성 |
+| 9 | Android 버전별 FGS/notification/startActivity 제약 설명이 혼재 | 불필요한 Activity launch 또는 권한 요구로 설계 혼선 | PackageInstaller 권한, FGS 생존성, notification 권한을 분리 설명 |
+| 10 | `UpdateManager.java`를 DPC Downloader 직접 모델로 보기에는 검증 부족 | partial file, hash 누락, rename 실패 패턴 전파 위험 | 네트워크 골격만 참고하고 DPC 필수 검증 조건 별도 정의 |
+| 11 | Device Owner 등록 절차가 축약됨 | 현장 등록 실패 원인 추적 어려움 | DPC 선설치, DeviceAdminReceiver, QR provisioning payload, 실패 조건 추가 |
+| 12 | APK rollback 후 web rollback 순서가 crash loop를 만들 수 있음 | 구버전 APK가 신버전 web을 먼저 로드 가능 | `rollback_in_progress` marker와 web-first/staging rollback 순서 추가 |
+
+### 우선순위별 작업 정리
+
+#### P0 — 설계 오류 또는 현장 장애로 직결되는 항목
+
+1. **Atomic file 교체 재정의**
+   - `renameTo()` 단독 사용 금지.
+   - 같은 디렉터리 staging 후 `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)` 사용.
+   - move 실패 시 기존 live 파일을 보존하고 `.tmp`를 정리.
+
+2. **웹 콘텐츠 transaction/rollback 보강**
+   - `index.html`, `sw.js`, `manifest.json`, `version.txt`를 개별 즉시 교체하지 않음.
+   - staging 디렉터리에 전체 다운로드 → 파일별 sha256 검증 → live pointer/marker 전환.
+   - rollback source는 현재 Cloudflare root가 아니라 버전 고정 URL 또는 파일별 manifest로 관리.
+
+3. **PackageInstaller 오류 분류 고도화**
+   - `EXTRA_STATUS`, `EXTRA_STATUS_MESSAGE`, 가능하면 legacy install code를 모두 저장.
+   - `versionCode`, packageName, signing certificate, minSdk/ABI/feature 호환성은 설치 전 VERIFYING에서 선검증.
+   - `STATUS_FAILURE_CONFLICT == version downgrade` 같은 단정은 제거하고 legacy/message 기반으로 분기.
+
+4. **Manifest 서버를 DPC 자동 업데이트 필수 구성으로 고정**
+   - GitHub Releases 직접 조회 + 60분 캐시는 기존 수동 업데이트 보완책으로만 유지.
+   - DPC는 `sha256`, `versionCode`, `minNativeVersion`, rollback source, channel 정보를 Manifest 서버에서 받음.
+   - CI가 `sha256sum`, Gradle `versionCode`, `versionName`, rollback 후보 정보를 manifest artifact/KV로 배포.
+
+5. **Crash rollback watchdog 추가**
+   - Launcher가 정상 report를 못 보내는 cold-start crash를 DPC가 감지해야 함.
+   - `startup_pending(version, timestamp)` marker와 health timeout을 도입.
+   - rollback 판단은 Launcher report 단독이 아니라 DPC 관측값과 결합.
+
+#### P1 — 보안·운영 안정성 보강 항목
+
+1. **DPC/Launcher 서명 정책 재정리**
+   - Launcher APK는 기존 `android-app/release.keystore`로 계속 서명해야 업데이트 가능.
+   - DPC는 별도 keystore 사용을 기본 권장.
+   - DPC는 설치 대상 Launcher APK의 packageName과 signing certificate digest를 pinning.
+
+2. **IPC 신뢰 경계 명확화**
+   - DPC Bound Service는 explicit binding, caller UID/package 검증, signature permission을 사용.
+   - Launcher는 명령을 내리지 않고 검증된 report만 제출.
+   - report API는 stale report 방지를 위해 version/session/timestamp를 포함.
+
+3. **Android 버전별 제약 분리**
+   - `PackageInstaller.Session` 설치 권한 조건, Foreground Service 생존성, notification runtime permission을 별도 항목으로 설명.
+   - Android 13+ 알림 권한 거부 시에도 DPC 상태 머신은 동작해야 함.
+
+4. **Device Owner provisioning 절차 상세화**
+   - DPC APK 선설치, `DeviceAdminReceiver`, admin XML, `dpm set-device-owner` 실패 조건을 문서화.
+   - QR provisioning payload에는 package name, download URL, checksum, admin component를 포함.
+
+#### P2 — 향후 확장 항목
+
+1. `webDataSchema` 기반 IndexedDB/localStorage migration 정책 추가.
+2. stable/beta channel 분리와 staged rollout 정책 추가.
+3. 수백 대 이상 fleet 운영 시 manifest stale fallback, rollout percentage, device cohort 정책 추가.
+
+### 기존 리포트에 대한 최종 판단
+
+- **큰 방향성**: Device Owner + DPC + Manifest + PackageInstaller 기반 자동 업데이트 방향은 타당하다.
+- **가장 위험한 문구**: “동일 keystore 필수”, “renameTo 원자적 교체”, “GitHub 캐시로 수십 대 충분”, “PackageInstaller status 단순 매핑”은 구현 전에 반드시 수정해야 한다.
+- **다음 문서 개정 권장 순서**: 다운로드/rollback 원자성 → manifest/CI 생성 책임 → PackageInstaller 오류 분류 → DPC/Launcher 보안 경계 → Device Owner provisioning 상세화.
+
+---
+
 ## Final Logic Check (3차 — 2026-05-09)
 
 3차 GPT 피드백 5개 항목을 반영하여 아래와 같이 수정했다.
