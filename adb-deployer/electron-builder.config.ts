@@ -5,22 +5,16 @@ const config: Configuration = {
   appId: 'com.sympotalk.adb-deployer',
   productName: 'Sympotalk ADB Deployer',
   directories: {
-    buildResources: 'build',
+    buildResources: 'resources',
     output: 'dist'
   },
   files: ['out/**/*'],
-  extraResources: [
-    // ADB 바이너리 번들 (Phase 2에서 추가)
-    // { from: 'resources/adb', to: 'adb', filter: ['**/*'] }
-  ],
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
-    icon: 'build/icon.ico'
-  },
-  mac: {
-    target: [{ target: 'dmg', arch: ['x64', 'arm64'] }],
-    icon: 'build/icon.icns',
-    category: 'public.app-category.developer-tools'
+    target: [
+      { target: 'portable', arch: ['x64'] },
+      { target: 'nsis',     arch: ['x64'] }
+    ]
+    // TODO: icon — build/icon.ico 추가 후 활성화
   },
   nsis: {
     oneClick: false,
