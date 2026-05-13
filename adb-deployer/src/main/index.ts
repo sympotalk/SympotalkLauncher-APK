@@ -239,6 +239,6 @@ let deviceList: Device[] = []
   app.on('window-all-closed', () => {
     poller.stop()
     logStore.close()
-    if (process.platform !== 'darwin') app.quit()
+    app.quit()
   })
 })()

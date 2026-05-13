@@ -8,7 +8,6 @@
     "build": "electron-vite build",
     "build:win": "npm run build && electron-builder --win portable nsis",
     "dist": "npm run build && electron-builder --win portable nsis",
-    "build:mac": "npm run build && electron-builder --mac",
     "preview": "electron-vite preview"
   },
   "dependencies": {
