@@ -1,0 +1,48 @@
+[
+  {
+    "id": "refresh",
+    "label": "ADB 새로고침",
+    "description": "adb kill-server 후 재시작",
+    "args": ["kill-server"]
+  },
+  {
+    "id": "device-owner-check",
+    "label": "DO 확인",
+    "description": "Device Owner 등록 상태 조회",
+    "args": ["shell", "dpm", "get-active-admins"]
+  },
+  {
+    "id": "device-info",
+    "label": "기기 정보",
+    "description": "모델명 조회",
+    "args": ["shell", "getprop", "ro.product.model"]
+  },
+  {
+    "id": "launcher-start",
+    "label": "런처 실행",
+    "description": "Launcher 강제 시작",
+    "args": ["shell", "am", "start", "-n", "com.sympotalk.launcher/.MainActivity"]
+  },
+  {
+    "id": "launcher-force-stop",
+    "label": "강제 종료",
+    "description": "Launcher 강제 종료",
+    "args": ["shell", "am", "force-stop", "com.sympotalk.launcher"],
+    "requiresConfirm": true,
+    "dangerLevel": "warn"
+  },
+  {
+    "id": "reboot",
+    "label": "재부팅",
+    "description": "태블릿 재부팅",
+    "args": ["reboot"],
+    "requiresConfirm": true,
+    "dangerLevel": "warn"
+  },
+  {
+    "id": "logcat",
+    "label": "로그캣 수집",
+    "description": "최근 로그 100줄 수집",
+    "args": ["logcat", "-d", "-t", "100"]
+  }
+]
