@@ -9,6 +9,9 @@ const config: Configuration = {
     output: 'dist'
   },
   files: ['out/**/*'],
+  extraResources: [
+    { from: 'platform-tools', to: 'platform-tools' }
+  ],
   win: {
     target: [
       { target: 'portable', arch: ['x64'] },
