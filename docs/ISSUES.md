@@ -28,13 +28,6 @@
 
 ## Open
 
-### [P1] visibilitychange 리스너 3중 등록 (코드 정리)
-- **상태**: open
-- **발견일**: 2026-04-21
-- **관련 파일**: `index.html:1211, 2234, 2820`
-- **설명**: 동일 이벤트에 콜백 3개가 따로 등록됨 (heartbeat / wakeLock / install outcome). 기능 충돌은 없으나 단일 dispatcher로 통합하면 유지보수성 개선.
-- **해결안 후보**: `onVisibilityChange()` 디스패처 함수 도입 후 단일 listener로 위임.
-- **링크**: v1.0.43 감사 리포트 P1-1
 
 ### [P1] pagehide 정상 종료 시 INFO 로그 누적
 - **상태**: open
@@ -61,3 +54,4 @@
 | 2026-04-21 | 넓은 태블릿(1920px)에서 좌우 레터박스 | 170446e |
 | 2026-04-21 | PWA 사용자가 구 index.html 영구 캐시 | 170446e (sw.js v1→v2) |
 | 2026-04-16 | 비정상 종료 시 사용자에게 설명 부재 | 170446e (세션 하트비트) |
+| 2026-05-14 | visibilitychange 리스너 3중 등록 | a4f3679 (단일 dispatcher 통합) |

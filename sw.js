@@ -51,11 +51,10 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // 정적 파일: 캐시 우선, 없으면 네트워크
+  // 정적 파일: stale-while-revalidate (캐시 즉시 응답 + 백그라운드 갱신)
   event.respondWith(
     caches.match(event.request).then(function(cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function(response) {
+      var networkFetch = fetch(event.request).then(function(response) {
         if (response.ok && event.request.method === 'GET') {
           var clone = response.clone();
           caches.open(CACHE_NAME).then(function(cache) {
@@ -64,8 +63,10 @@ self.addEventListener('fetch', function(event) {
         }
         return response;
       }).catch(function() {
+        if (cached) return cached;
         return new Response('오프라인 상태입니다', { status: 503 });
       });
+      return cached || networkFetch;
     })
   );
 });

@@ -1365,7 +1365,10 @@ function endSession() {
 
 window.addEventListener('pagehide', function(e) {
   var reason = e.persisted ? 'pagehide (bfcache)' : 'pagehide (종료)';
-  SympotalkLog.push('info', reason, '앱 화면이 닫혔습니다.');
+  if (!e.persisted) {
+    // bfcache(sleep/wake) 반복은 로그 제외 — 버퍼 소진 방지
+    SympotalkLog.push('info', reason, '앱 화면이 닫혔습니다.');
+  }
   updateSessionBeat(reason);
   endSession();
 });
