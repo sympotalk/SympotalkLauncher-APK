@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DPC Device Admin 정책 선언 — DeviceAdminReceiver 메타데이터 -->
+<device-admin>
+    <uses-policies>
+        <!-- 패키지 설치/삭제 제어 (Device Owner 전용) -->
+    </uses-policies>
+</device-admin>

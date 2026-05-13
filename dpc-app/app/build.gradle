@@ -1,0 +1,44 @@
+// DPC 앱 모듈 빌드 설정 — Launcher와 독립된 별도 APK
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.sympotalk.dpc'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.sympotalk.dpc"
+        minSdk 28          // Android 9 (LG G Pad 5)
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+
+        buildConfigField "String", "LAUNCHER_PACKAGE", "\"com.sympotalk.launcher\""
+        buildConfigField "String", "MANIFEST_URL", "\"https://sympotalklauncher-apk.pages.dev/manifest.json\""
+    }
+
+    // 이번 단계에서는 debug keystore 사용. cert pinning은 후속 단계.
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+}

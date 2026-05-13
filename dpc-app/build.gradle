@@ -1,0 +1,4 @@
+// DPC 최상위 빌드 파일
+plugins {
+    id 'com.android.application' version '8.3.0' apply false
+}

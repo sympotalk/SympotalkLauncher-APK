@@ -1,0 +1,66 @@
+name: Build DPC APK
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'dpc-app/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build-dpc:
+    name: Build Sympotalk DPC APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+          cache-read-only: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Build debug APK
+        working-directory: dpc-app
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sympotalk-dpc-debug
+          path: dpc-app/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 90
+
+      - name: Update latest-dpc release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dpc-latest
+          name: Sympotalk DPC (latest debug build)
+          draft: false
+          prerelease: true
+          files: dpc-app/app/build/outputs/apk/debug/app-debug.apk
+          body: |
+            자동 빌드된 DPC APK입니다.
+            adb-deployer 초기 세팅 탭에서 이 파일을 선택하세요.
+
+            패키지: `com.sympotalk.dpc`
+            빌드: debug (서명 없음 — Device Owner 등록용)

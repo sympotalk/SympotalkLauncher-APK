@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sympotalk DPC</string>
+    <string name="dpc_admin_label">Sympotalk 기기 관리자</string>
+    <string name="dpc_admin_description">Launcher APK 자동 업데이트 및 감시</string>
+</resources>
