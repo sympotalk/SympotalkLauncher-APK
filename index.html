@@ -1387,13 +1387,13 @@ if ('onfreeze' in document) {
   });
 }
 
-document.addEventListener('visibilitychange', function() {
+function handleVisibilitySession() {
   if (document.visibilityState === 'hidden') {
     updateSessionBeat('visibility:hidden');
   } else {
     updateSessionBeat('visibility:visible');
   }
-});
+}
 
 /* ═══════════════════════════════════════════════════════
    STATE
@@ -2444,13 +2444,13 @@ function requestWakeLock() {
   showToast('절전 방지 활성화됨');
 }
 
-document.addEventListener('visibilitychange', function() {
+function handleVisibilityWakeLock() {
   if (document.visibilityState === 'visible') {
     if (!state.wakeLock || state.wakeLock.released) {
       enableNoSleep();
     }
   }
-});
+}
 
 function startSWKeepalive() {
   if (!navigator.serviceWorker) return;
@@ -3023,10 +3023,16 @@ function uninstallAndReinstall() {
   }
 }
 
-document.addEventListener('visibilitychange', function() {
+function handleVisibilityInstall() {
   if (document.visibilityState === 'visible') {
     setTimeout(checkInstallOutcome, 500);
   }
+}
+
+document.addEventListener('visibilitychange', function() {
+  handleVisibilitySession();
+  handleVisibilityWakeLock();
+  handleVisibilityInstall();
 });
 
 /* ═══════════════════════════════════════════════════════
