@@ -55,3 +55,5 @@
 | 2026-04-21 | PWA 사용자가 구 index.html 영구 캐시 | 170446e (sw.js v1→v2) |
 | 2026-04-16 | 비정상 종료 시 사용자에게 설명 부재 | 170446e (세션 하트비트) |
 | 2026-05-14 | visibilitychange 리스너 3중 등록 | a4f3679 (단일 dispatcher 통합) |
+| 2026-05-14 | pagehide bfcache 로그 버퍼 소진 | abe3827 (persisted=false 조건부 기록) |
+| 2026-05-14 | sw.js cache-first 패턴 | abe3827 (stale-while-revalidate 전환) |
