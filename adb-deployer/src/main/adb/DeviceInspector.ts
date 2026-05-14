@@ -54,8 +54,10 @@ export class DeviceInspector {
   }
 
   // Google 계정 없음 여부 (DO 등록 사전 조건)
+  // RegisteredServicesCache의 "AuthenticatorDescription {type=com.google}"는 시스템 서비스라 제외
+  // 실제 사용자 계정은 "Account {name=..., type=com.google}" 형식으로만 등장
   async hasNoGoogleAccount(serial: string): Promise<boolean> {
     const r = await this.engine.exec(['-s', serial, 'shell', 'dumpsys', 'account'])
-    return !r.stdout.includes('type=com.google')
+    return !/Account \{[^}]*type=com\.google/.test(r.stdout)
   }
 }
