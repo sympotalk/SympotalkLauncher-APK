@@ -45,6 +45,19 @@ export function SetupWizardView() {
     setResults([])
 
     const all: DispatchResult[] = await window.api.executeBatch(targetSerials, args, timeoutMs)
+
+    // DO 등록 성공 후 PACKAGE_USAGE_STATS 권한 자동 부여 (HealthWatchdog 필수)
+    if (step === 1 && all.every(r => r.status === 'success')) {
+      const permArgs = ['shell', 'appops', 'set', 'com.sympotalk.dpc', 'PACKAGE_USAGE_STATS', 'allow']
+      const permResults = await window.api.executeBatch(targetSerials, permArgs, timeoutMs)
+      setResults([...all, ...permResults])
+      setRunning(false)
+      if (permResults.every(r => r.status === 'success')) {
+        setTimeout(() => setStep(2 as StepIndex), 500)
+      }
+      return
+    }
+
     setResults(all)
     setRunning(false)
 

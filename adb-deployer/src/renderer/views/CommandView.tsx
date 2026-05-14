@@ -15,6 +15,8 @@ const PRESET_LIST: CommandPreset[] = [
     args: ['shell', 'dpm', 'set-device-owner', 'com.sympotalk.dpc/.DpcAdminReceiver'],
     requiresConfirm: true },
   { id: 'device-owner-check', label: 'DO 확인',  description: 'Device Owner 확인',   args: ['shell', 'dpm', 'get-active-admins'] },
+  { id: 'dpc-grant-usage-stats', label: 'DPC 권한 부여', description: 'PACKAGE_USAGE_STATS 허용 — HealthWatchdog 필수',
+    args: ['shell', 'appops', 'set', 'com.sympotalk.dpc', 'PACKAGE_USAGE_STATS', 'allow'] },
   { id: 'launcher-start', label: '런처 실행',    description: 'Launcher 강제 시작',
     args: ['shell', 'am', 'start', '-n', 'com.sympotalk.launcher/.MainActivity'] },
   { id: 'launcher-force-stop', label: '강제 종료', description: 'Launcher 강제 종료',
