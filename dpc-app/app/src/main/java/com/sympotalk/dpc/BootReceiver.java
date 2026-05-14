@@ -21,10 +21,9 @@ public class BootReceiver extends BroadcastReceiver {
         UpdateStateMachine.State state = sm.getState();
         Log.i(TAG, "복원된 상태: " + state.name());
 
-        // HEALTH_WAIT 중 재부팅 → HealthWatchdog이 Launcher 기동 확인
+        // HEALTH_WAIT 중 재부팅 → 서비스가 handleBootRestore()에서 HealthWatchdog 재시작
         if (state == UpdateStateMachine.State.HEALTH_WAIT) {
-            Log.i(TAG, "HEALTH_WAIT 복원 — HealthWatchdog 재시작");
-            // TODO: HealthWatchdog 재시작 (HealthWatchdog 구현 후 연결)
+            Log.i(TAG, "HEALTH_WAIT 복원 — DpcUpdateService 재시작");
         }
 
         DpcAdminReceiver.startUpdateService(context);
