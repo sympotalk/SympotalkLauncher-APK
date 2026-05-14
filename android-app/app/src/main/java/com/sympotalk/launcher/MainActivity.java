@@ -1,6 +1,7 @@
 package com.sympotalk.launcher;
 
 import android.Manifest;
+import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -741,6 +742,18 @@ public class MainActivity extends AppCompatActivity {
          */
         @JavascriptInterface
         public void downloadAndInstallApk(String apkUrl) {
+            // DO 등록된 DPC 앱이 있으면 silent install 위임
+            DevicePolicyManager dpm =
+                (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
+            if (dpm != null && dpm.isDeviceOwnerApp("com.sympotalk.dpc")) {
+                Intent trigger = new Intent("com.sympotalk.dpc.ACTION_CHECK_UPDATE");
+                trigger.setPackage("com.sympotalk.dpc");
+                sendBroadcast(trigger);
+                jsCallback("window.onAppDownloadComplete && onAppDownloadComplete()");
+                return;
+            }
+
+            // DO 없음 — 기존 ACTION_VIEW + 사용자 승인 방식
             // 알 수 없는 출처 허용 확인 (Android 8+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     && !getPackageManager().canRequestPackageInstalls()) {
