@@ -56,6 +56,6 @@ export class DeviceInspector {
   // Google 계정 없음 여부 (DO 등록 사전 조건)
   async hasNoGoogleAccount(serial: string): Promise<boolean> {
     const r = await this.engine.exec(['-s', serial, 'shell', 'dumpsys', 'account'])
-    return !r.stdout.toLowerCase().includes('com.google')
+    return !r.stdout.includes('type=com.google')
   }
 }
