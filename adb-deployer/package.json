@@ -1,6 +1,6 @@
 {
   "name": "sympotalk-adb-deployer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Sympotalk ADB 병렬 배포 데스크탑 앱",
   "main": "./out/main/index.js",
   "scripts": {

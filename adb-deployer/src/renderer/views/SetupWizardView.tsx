@@ -1,7 +1,7 @@
 // 초기 세팅 마법사 — DPC 설치 → DO 등록 → Launcher 설치 3단계
-import { useState } from 'react'
 import { useDeviceStore } from '../store/deviceStore'
 import { useSettingsStore } from '../store/settingsStore'
+import { useWizardStore } from '../store/wizardStore'
 import { ApkSelector } from '../components/ApkSelector'
 import { ResultPanel } from '../components/ResultPanel'
 import type { DispatchResult, PrerequisiteCheckResult } from '../types/Command'
@@ -10,10 +10,7 @@ const STEPS = ['1. DPC 설치', '2. DO 등록', '3. Launcher 설치'] as const
 type StepIndex = 0 | 1 | 2
 
 export function SetupWizardView() {
-  const [step, setStep] = useState<StepIndex>(0)
-  const [running, setRunning] = useState(false)
-  const [results, setResults] = useState<DispatchResult[]>([])
-  const [prereqChecks, setPrereqChecks] = useState<Record<string, PrerequisiteCheckResult>>({})
+  const { step, running, results, prereqChecks, setStep, setRunning, setResults, setPrereqChecks } = useWizardStore()
 
   const { devices, selectedSerials } = useDeviceStore()
   const { dpcApkPath, launcherApkPath, timeoutMs } = useSettingsStore()
@@ -53,7 +50,7 @@ export function SetupWizardView() {
 
     // 전부 성공하면 다음 단계로
     if (all.every(r => r.status === 'success') && step < 2) {
-      setTimeout(() => setStep(s => (s + 1) as StepIndex), 500)
+      setTimeout(() => setStep((step + 1) as StepIndex), 500)
     }
   }
 
@@ -112,7 +109,7 @@ export function SetupWizardView() {
 
       <div className="wizard-actions">
         {step > 0 && (
-          <button className="btn btn-secondary" onClick={() => setStep(s => (s - 1) as StepIndex)} disabled={running}>
+          <button className="btn btn-secondary" onClick={() => setStep((step - 1) as StepIndex)} disabled={running}>
             ← 이전
           </button>
         )}
