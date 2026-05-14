@@ -1,6 +1,6 @@
 {
   "name": "sympotalk-adb-deployer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sympotalk ADB 병렬 배포 데스크탑 앱",
   "main": "./out/main/index.js",
   "scripts": {
@@ -13,6 +13,31 @@
   "dependencies": {
     "electron-store": "^7.0.3",
     "uuid": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.sympotalk.adb-deployer",
+    "productName": "Sympotalk ADB Deployer",
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "files": ["out/**/*"],
+    "extraResources": [
+      { "from": "platform-tools", "to": "platform-tools" },
+      { "from": "usb_driver",     "to": "usb_driver" }
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] },
+        { "target": "nsis",     "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["ko_KR"],
+      "language": "1042"
+    }
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",

@@ -35,8 +35,14 @@ declare global {
       // ─── 보안 ───────────────────────────────────────────
       checkCommand:         (args: string[]) => Promise<string | null>
       checkDoPrerequisites: (serial: string) => Promise<PrerequisiteCheckResult>
+
+      // ─── USB 드라이버 ────────────────────────────────────
+      checkDriver:   () => Promise<boolean>
+      installDriver: () => Promise<{ ok: boolean; message: string }>
     }
   }
 }
+
+declare const __APP_VERSION__: string
 
 export {}

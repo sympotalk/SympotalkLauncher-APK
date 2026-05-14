@@ -23,6 +23,7 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <h1 className="app-title">Sympotalk ADB Deployer</h1>
+        <span className="app-version">v{__APP_VERSION__}</span>
         {selectedCount > 0 && (
           <span className="app-selected-badge">{selectedCount}대 선택됨</span>
         )}

@@ -11,6 +11,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    define: {
+      // npm run build 시 npm이 자동으로 npm_package_version 환경변수를 설정
+      __APP_VERSION__: JSON.stringify(process.env['npm_package_version'] ?? '0.0.0')
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer')

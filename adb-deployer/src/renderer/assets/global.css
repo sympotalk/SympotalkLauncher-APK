@@ -29,6 +29,7 @@ pre { font-family: 'Consolas', monospace; white-space: pre-wrap; word-break: bre
   border-bottom: 1px solid var(--color-border); flex-shrink: 0;
 }
 .app-title { font-size: 15px; font-weight: 600; color: var(--color-primary); }
+.app-version { font-size: 11px; color: var(--color-text-muted); opacity: 0.6; }
 .app-selected-badge {
   background: var(--color-primary); color: #fff;
   padding: 2px 8px; border-radius: 12px; font-size: 11px;
