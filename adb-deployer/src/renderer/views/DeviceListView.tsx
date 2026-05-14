@@ -9,8 +9,26 @@ export function DeviceListView() {
     useDeviceStore()
   const [polling, setPolling] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [driverInstalled, setDriverInstalled] = useState<boolean | null>(null)
+  const [driverMsg, setDriverMsg] = useState<string | null>(null)
+  const [installingDriver, setInstallingDriver] = useState(false)
+
+  const checkDriver = () => {
+    window.api.checkDriver().then((installed: boolean) => setDriverInstalled(installed))
+  }
+
+  const installDriver = async () => {
+    setInstallingDriver(true)
+    setDriverMsg(null)
+    const res = await window.api.installDriver()
+    setDriverMsg(res.message)
+    setInstallingDriver(false)
+    if (res.ok) setDriverInstalled(true)
+  }
 
   useEffect(() => {
+    checkDriver()
+
     // 폴러 시작
     window.api.startPoller().then((res: { ok: boolean; error?: string }) => {
       if (res.ok) {
@@ -52,6 +70,30 @@ export function DeviceListView() {
           {polling ? '● 폴링 중' : '○ 중지'}
         </span>
         {error && <span className="text-red">{error}</span>}
+      </div>
+
+      {/* USB 드라이버 상태 */}
+      <div className="driver-bar">
+        <span className="driver-bar__label">USB 드라이버</span>
+        {driverInstalled === null && <span className="text-muted">확인 중...</span>}
+        {driverInstalled === true  && <span className="text-green">✓ 설치됨</span>}
+        {driverInstalled === false && (
+          <>
+            <span className="text-red">✗ 미설치 — 태블릿이 인식되지 않으면 설치하세요.</span>
+            <button
+              className="btn btn-sm btn-warning"
+              onClick={installDriver}
+              disabled={installingDriver}
+            >
+              {installingDriver ? '설치 중...' : '드라이버 설치 (관리자 권한 필요)'}
+            </button>
+          </>
+        )}
+        {driverMsg && (
+          <span className={driverMsg.includes('완료') ? 'text-green' : 'text-red'}>
+            {driverMsg}
+          </span>
+        )}
       </div>
 
       <div className="device-list">

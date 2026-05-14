@@ -60,4 +60,11 @@ contextBridge.exposeInMainWorld('api', {
 
   checkDoPrerequisites: (serial: string) =>
     ipcRenderer.invoke(IPC.GUARD_DO_PREREQ, serial),
+
+  // ─── USB 드라이버 ──────────────────────────────────────
+  checkDriver: () =>
+    ipcRenderer.invoke(IPC.DRIVER_CHECK),
+
+  installDriver: () =>
+    ipcRenderer.invoke(IPC.DRIVER_INSTALL),
 })

@@ -21,6 +21,10 @@ export const IPC = {
   LOG_EXPORT:             'log:export',
   GUARD_CHECK:            'guard:check',
   GUARD_DO_PREREQ:        'guard:do-prereq',
+
+  // USB 드라이버
+  DRIVER_CHECK:           'driver:check',
+  DRIVER_INSTALL:         'driver:install',
 } as const
 
 export type IpcChannel = typeof IPC[keyof typeof IPC]

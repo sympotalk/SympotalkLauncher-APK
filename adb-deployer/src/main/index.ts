@@ -2,6 +2,7 @@
 // 참고: createRequire로 electron을 IIFE 안에서 지연 로드 (모듈 로드 타임 호이스팅 방지)
 import { createRequire } from 'node:module'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { AdbEngine } from './adb/AdbEngine'
 import { DevicePoller } from './adb/DevicePoller'
 import { CommandExecutor } from './adb/CommandExecutor'
@@ -10,6 +11,7 @@ import { ApkManager } from './apk/ApkManager'
 import { LogStore } from './log/LogStore'
 import { LogExporter } from './log/LogExporter'
 import { CommandGuard } from './security/CommandGuard'
+import { DriverInstaller } from './driver/DriverInstaller'
 import { IPC } from '../renderer/types/ipc'
 import type { Device } from '../renderer/types/Device'
 import Store from 'electron-store'
@@ -26,6 +28,7 @@ const apkManager = new ApkManager()
 const logStore   = new LogStore()
 const exporter   = new LogExporter()
 const guard      = new CommandGuard()
+const driverInstaller = new DriverInstaller()
 
 const settingsStore = new Store({
   defaults: { concurrency: 5, timeoutMs: 30_000 }
@@ -46,6 +49,18 @@ let deviceList: Device[] = []
   logStore.setApp(app)
   apkManager.setDialog(dialog)
   exporter.setDialog(dialog)
+
+  // USB 드라이버 번들 경로 주입
+  const driverCandidates = [
+    join(process.resourcesPath, 'usb_driver'),
+    join(__dirname, '..', '..', 'usb_driver'),
+  ]
+  for (const candidate of driverCandidates) {
+    if (existsSync(candidate)) {
+      driverInstaller.setDriverDir(candidate)
+      break
+    }
+  }
 
   // ─── 윈도우 생성 ─────────────────────────────────────────
 
@@ -225,6 +240,14 @@ let deviceList: Device[] = []
 
   ipcMain.handle(IPC.GUARD_DO_PREREQ, async (_, serial: string) => {
     return guard.checkDoPrerequisites(serial, inspector)
+  })
+
+  ipcMain.handle(IPC.DRIVER_CHECK, async () => {
+    return driverInstaller.isInstalled()
+  })
+
+  ipcMain.handle(IPC.DRIVER_INSTALL, async () => {
+    return driverInstaller.install()
   })
 
   // ─── 앱 수명주기 ─────────────────────────────────────────
