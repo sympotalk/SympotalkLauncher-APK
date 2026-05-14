@@ -42,9 +42,9 @@ export class DeviceInspector {
     return m ? parseInt(m[1]) : -1
   }
 
-  // dpm get-active-admins 출력에 DpcAdminReceiver 포함 여부
+  // dumpsys device_policy — Android 5+ 지원, dpm get-active-admins는 Android 10+에서만 동작
   async isDeviceOwner(serial: string): Promise<boolean> {
-    const r = await this.engine.exec(['-s', serial, 'shell', 'dpm', 'get-active-admins'])
+    const r = await this.engine.exec(['-s', serial, 'shell', 'dumpsys', 'device_policy'])
     return r.stdout.includes('com.sympotalk.dpc')
   }
 
