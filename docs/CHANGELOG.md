@@ -13,6 +13,27 @@
 
 ---
 
+## [1.2.0] - 2026-05-17
+
+태블릿 부팅 burst 완화 (thermage0516 사고 보고서 RC-8 / RC-9 후속).
+
+### Changed
+- **jsQR 동기 로드 제거** — `<head>` 의 `cdn.jsdelivr.net` 동기 `<script>` 삭제. QR 탭 진입시 `ensureJsQR()` 가 self-host `/vendor/jsQR.min.js` 를 동적 로드. 첫 페인트 전 130KB 외부 CDN 다운로드 제거 → 102대 동시 부팅시 jsdelivr 향한 외부 요청 102건 → 0건.
+- **proxyFetch 5초 timeout** — `AbortController` 기반. 행사장 WiFi 큐잉으로 인한 무한 펜딩 차단. `abortInFlightProxyFetches()` 헬퍼로 화면 전환시 stale 요청 일괄 취소 가능.
+- **/api/rooms batch 호출** — `?event_ids=a,b,c` 신설. 클라이언트는 행사 N개당 1회로 통합 호출 (기존: N병렬). 102대×N → 102×1, AP burst 큰 폭 감소. 50개 chunk 분할 + UUID 검증 유지.
+- **Service Worker 강화** — `sw.js v5 → v6`, `/vendor/jsQR.min.js` 를 STATIC_ASSETS 에 추가해 precache. Supabase 패스스루 fetch 에도 5초 timeout 적용.
+- **preconnect / dns-prefetch hint** — `sympopad.com`, `live.sympopad.com`, `media.sympopad.com`, Supabase 도메인. 첫 진입 RTT 절감 (보조 최적화).
+- **`/vendor/*` 캐시 정책** — `_headers` 에 `max-age=31536000, immutable` 추가. 자체 호스트 벤더 파일은 버전 잠금이라 적극 캐시.
+
+### Bumped
+- versionCode 49 → 50, versionName 1.1.9 → 1.2.0
+
+### Migration / Ops notes
+- **CACHE_NAME bump 운영 주의**: `v6` 으로 올렸으므로 다음 부팅때 모든 태블릿이 STATIC_ASSETS 를 재다운로드한다. 행사 시작 24h 이내에는 추가 CACHE_NAME bump 금지 (102대 동시 cache-miss = AP burst 재발).
+- batch API 는 단일 모드(`?event_id=`) 호환 유지. 외부에서 단일 호출 패턴을 쓰는 코드가 있어도 영향 없음.
+
+---
+
 ## [1.0.43] - 2026-04-21
 
 ### Added

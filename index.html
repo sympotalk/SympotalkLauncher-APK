@@ -3,9 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Sympotalk Launcher v1.1.1</title>
-<!-- jsQR: QR 디코딩 라이브러리 (보존) -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<title>Sympotalk Launcher v1.2.0</title>
+
+<!-- 부팅 burst 완화: 첫 진입에 필요한 호스트만 사전연결, jsQR은 QR 탭 진입시 동적 로드 -->
+<link rel="preconnect" href="https://bpxqnfwuvhlaottcnpie.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://sympopad.com">
+<link rel="dns-prefetch" href="https://live.sympopad.com">
+<link rel="dns-prefetch" href="https://media.sympopad.com">
+<!-- jsQR: head에서 동기 로드하지 않음. ensureJsQR()이 QR 탭 진입시 /vendor/jsQR.min.js 동적 로드 -->
 <style>
 /* ═══════════════════════════════════════════════════════
    DESIGN TOKENS — Black + Neon Green (#00FF00)
@@ -1779,6 +1784,11 @@ function connectWifiNow(ssid, password, security) {
 function showView(name) {
   if (name === state.currentView) return;
 
+  /* 화면 전환 직전 in-flight proxyFetch 일괄 취소 — stale request가 새 화면 위에
+     덮어쓰지 못하게, 그리고 행사장 WiFi/AP에 불필요한 트래픽을 남기지 않게.
+     proxyFetch는 cancelled flag를 보고 fallbackFn을 실행하지 않고 조용히 종료한다. */
+  abortInFlightProxyFetches();
+
   // QR 뷰에서 이탈하는 경우 카메라 정지
   if (state.currentView === 'qr' && name !== 'qr') stopScanner();
 
@@ -1874,20 +1884,89 @@ function supaRpc(fnName, payload) {
   }).then(function(r) { return r.json(); });
 }
 
+/* 진행 중인 proxyFetch 요청 등록부 — 화면 전환 시 abortInFlightProxyFetches()로 일괄 취소.
+   abortInFlightProxyFetches()는 abort 직전에 ctrl.__abortReason = 'cancelled'를 표시해
+   proxyFetch catch 분기에서 timeout vs view-change cancellation을 구분 가능하게 한다. */
+var inFlightProxyFetches = [];
+var PROXY_FETCH_TIMEOUT_MS = 5000;
+
+function abortInFlightProxyFetches() {
+  for (var i = 0; i < inFlightProxyFetches.length; i++) {
+    var c = inFlightProxyFetches[i];
+    try {
+      c.__abortReason = 'cancelled';
+      c.abort();
+    } catch (e) {}
+  }
+  inFlightProxyFetches = [];
+}
+
+/* AbortError 처리 규칙 (PR #3 review 후 명확화):
+     - timeout/cancelled: fallbackFn 자동 실행 금지. err.aborted=true 와 reason(timeout|cancelled) 부여 후 throw.
+     - HTTP 4xx/5xx (proxy 응답): err.httpStatus 부여, fallbackFn 허용 가능 (호출자가 status 검사 후 결정).
+     - 기타 일반 실패 (network 오류 등): fallbackFn 허용.
+   호출자(fetchRoomsBatchChunk 등)는 err.timeout/err.cancelled/err.httpStatus를 보고
+   재시도·에러 UI·구조적 fallback 중 선택한다. */
 function proxyFetch(endpoint, fallbackFn) {
   var proxyUrl = PROXY_URL + endpoint;
-  return fetch(proxyUrl, {
+  /* Chrome 71+(G Pad 5)·Chrome 138 모두 AbortController 지원 */
+  var hasAbort = (typeof AbortController === 'function');
+  var ctrl = hasAbort ? new AbortController() : null;
+  var fetchOpts = {
     method: 'GET',
     headers: { 'Accept': 'application/json' }
-  }).then(function(r) {
-    if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
+  };
+  if (ctrl) fetchOpts.signal = ctrl.signal;
+  if (ctrl) inFlightProxyFetches.push(ctrl);
+
+  var timer = setTimeout(function() {
+    if (ctrl) {
+      ctrl.__abortReason = 'timeout';
+      try { ctrl.abort(); } catch (e) {}
+    }
+  }, PROXY_FETCH_TIMEOUT_MS);
+
+  function cleanup() {
+    clearTimeout(timer);
+    if (ctrl) {
+      var idx = inFlightProxyFetches.indexOf(ctrl);
+      if (idx >= 0) inFlightProxyFetches.splice(idx, 1);
+    }
+  }
+
+  return fetch(proxyUrl, fetchOpts).then(function(r) {
+    if (!r.ok) {
+      var httpErr = new Error('Proxy HTTP ' + r.status);
+      httpErr.httpStatus = r.status;
+      throw httpErr;
+    }
     return r.json();
   }).then(function(data) {
+    cleanup();
     if (!Array.isArray(data)) {
       throw new Error('Proxy returned non-array: ' + JSON.stringify(data).slice(0, 100));
     }
     return data;
   }).catch(function(err) {
+    cleanup();
+    var reason = (ctrl && ctrl.__abortReason) || null;
+    var aborted = err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''));
+
+    /* abort/timeout: fallbackFn 자동 실행 금지. 호출자가 metadata 보고 결정. */
+    if (aborted) {
+      var abortErr;
+      if (reason === 'cancelled') {
+        abortErr = new Error('Proxy fetch cancelled (view change)');
+        abortErr.cancelled = true;
+      } else {
+        abortErr = new Error('Proxy fetch timeout (' + PROXY_FETCH_TIMEOUT_MS + 'ms)');
+        abortErr.timeout = true;
+      }
+      abortErr.aborted = true;
+      throw abortErr;
+    }
+
+    /* HTTP/일반 실패: 기존대로 fallbackFn 허용. err.httpStatus 노출. */
     if (typeof fallbackFn === 'function') return fallbackFn();
     throw err;
   });
@@ -2018,11 +2097,115 @@ function renderEventList(events) {
     ? buildEventCardsHtml(ended, true)
     : '<div class="empty-msg"><div class="icon">📚</div><div>지난 행사가 없습니다</div></div>';
 
-  // 2차: 각 행사의 룸 정보 fetch (병렬) 후 액션 행 채움
+  // 2차: 모든 행사의 룸 정보를 batch 1회 호출로 수집 (102대 burst 완화)
   var allEvents = ongoing.concat(ended);
-  for (var k = 0; k < allEvents.length; k++) {
-    fetchAndFillRooms(allEvents[k]);
+  fetchRoomsBatch(allEvents);
+}
+
+/* /api/rooms?event_ids=a,b,c batch 호출 — 응답을 event_id 별로 dispatch.
+   - 이미 roomsCache 에 있는 행사는 즉시 렌더 후 batch 에서 제외
+   - 50개 초과시 chunk 단위로 분할 호출
+   - batch 실패시 행사별 fetchAndFillRooms 로 graceful fallback */
+function fetchRoomsBatch(events) {
+  var pending = [];
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    if (!ev || !ev.id) continue;
+    if (roomsCache[ev.id]) {
+      fillRoomActionRow(ev, roomsCache[ev.id]);
+      continue;
+    }
+    pending.push(ev);
   }
+  if (pending.length === 0) return;
+
+  var CHUNK = 50;
+  for (var c = 0; c < pending.length; c += CHUNK) {
+    fetchRoomsBatchChunk(pending.slice(c, c + CHUNK));
+  }
+}
+
+function fetchRoomsBatchChunk(events) {
+  var ids = [];
+  var byId = {};
+  for (var i = 0; i < events.length; i++) {
+    ids.push(events[i].id);
+    byId[events[i].id] = events[i];
+  }
+  var qs = '/api/rooms?event_ids=' + ids.map(encodeURIComponent).join(',');
+
+  function dispatchRooms(rooms) {
+    var grouped = {};
+    for (var j = 0; j < rooms.length; j++) {
+      var r = rooms[j];
+      var eid = r.event_id;
+      if (!eid) continue;
+      if (!grouped[eid]) grouped[eid] = [];
+      grouped[eid].push(r);
+    }
+    for (var k = 0; k < ids.length; k++) {
+      var id = ids[k];
+      var list = grouped[id] || [];
+      roomsCache[id] = list;
+      fillRoomActionRow(byId[id], list);
+    }
+  }
+
+  /* 모든 chunk의 룸 카드 영역에 에러 UI 표시 — 개별 fetch fallback 대신 사용자에게 새로고침 유도 */
+  function showBatchErrorUI() {
+    for (var m = 0; m < events.length; m++) {
+      var areaEl = document.getElementById('rooms-' + events[m].id);
+      if (areaEl) {
+        areaEl.innerHTML = '<div class="empty-rooms">' +
+          '<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+          '<div><strong>룸 정보를 불러오지 못했습니다</strong>네트워크 상태를 확인하고 새로고침해주세요.</div>' +
+        '</div>';
+      }
+    }
+  }
+
+  var retryAttempted = false;
+
+  function attempt() {
+    proxyFetch(qs).then(dispatchRooms).catch(function(err) {
+      /* (a) 화면 전환으로 인한 취소 — 새 화면이 자체 로직 갖고 있으므로 조용히 종료. UI/로그 모두 X. */
+      if (err && err.cancelled) {
+        return;
+      }
+
+      /* (b) timeout — 개별 fetch 폴백 절대 금지 (burst 회피 목적 위배).
+             jitter 300~1000ms 후 batch 1회만 재시도. 그래도 실패하면 에러 UI 노출. */
+      if (err && err.timeout) {
+        if (!retryAttempted) {
+          retryAttempted = true;
+          var jitter = 300 + Math.floor(Math.random() * 700);
+          SympotalkLog.push('warn', '룸 batch timeout — ' + jitter + 'ms 후 1회 재시도');
+          setTimeout(attempt, jitter);
+          return;
+        }
+        SympotalkLog.push('error', '룸 batch timeout (재시도 실패)', '네트워크 상태를 확인하고 새로고침해주세요.');
+        showBatchErrorUI();
+        return;
+      }
+
+      /* (c) 구조적 실패 — batch endpoint 미지원/잘못된 요청만 개별 fallback 허용.
+             400 (잘못된 event_ids), 404 (endpoint 없음), 405 (Method), 501 (Not Implemented). */
+      var status = err && err.httpStatus;
+      if (status === 400 || status === 404 || status === 405 || status === 501) {
+        SympotalkLog.push('warn', '룸 batch endpoint 미지원 (HTTP ' + status + ') — 개별 fetch 폴백');
+        for (var n = 0; n < events.length; n++) {
+          fetchAndFillRooms(events[n]);
+        }
+        return;
+      }
+
+      /* (d) 기타 일반 실패 (5xx 등) — burst 회피 위해 개별 fallback 안 함, 에러 UI 노출. */
+      SympotalkLog.push('error', '룸 batch 실패: ' + (err && err.message || ''), '네트워크 상태를 확인하고 새로고침해주세요.');
+      showBatchErrorUI();
+    });
+  }
+
+  attempt();
 }
 
 /** 골격 HTML — 룸 영역은 placeholder */
@@ -2233,6 +2416,29 @@ function openLink(encodedUrl) {
 /* ═══════════════════════════════════════════════════════
    QR SCANNER (보존)
 ═══════════════════════════════════════════════════════ */
+
+/* jsQR 라이브러리는 QR 탭 진입시 1회만 동적 로드 (self-host).
+   - head 동기 <script> 제거로 초기 부팅 burst 130KB 감소
+   - QR 탭을 한번도 안 여는 키오스크 단말은 영원히 다운로드 안 함 */
+var _jsQRLoadingPromise = null;
+
+function ensureJsQR() {
+  if (typeof jsQR === 'function') return Promise.resolve();
+  if (_jsQRLoadingPromise) return _jsQRLoadingPromise;
+  _jsQRLoadingPromise = new Promise(function(resolve, reject) {
+    var s = document.createElement('script');
+    s.src = '/vendor/jsQR.min.js';
+    s.async = true;
+    s.onload = function() { resolve(); };
+    s.onerror = function() {
+      _jsQRLoadingPromise = null;
+      reject(new Error('jsQR 로드 실패'));
+    };
+    document.head.appendChild(s);
+  });
+  return _jsQRLoadingPromise;
+}
+
 function startScanner() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     var s1 = document.getElementById('scan-status');
@@ -2243,6 +2449,12 @@ function startScanner() {
 
   var statusEl = document.getElementById('scan-status');
   if (statusEl) statusEl.textContent = '카메라 권한 요청 중...';
+
+  /* QR 디코더 로드를 카메라 권한 요청과 병렬 진행 — 권한 다이얼로그 대기 시간에 다운로드 끝남 */
+  ensureJsQR().catch(function(err) {
+    SympotalkLog.push('error', 'jsQR 동적 로드 실패: ' + (err && err.message || ''));
+    if (statusEl) statusEl.textContent = 'QR 디코더 로드 실패. 새로고침 후 다시 시도해 주세요.';
+  });
 
   var constraints = {
     video: {
