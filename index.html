@@ -1784,6 +1784,11 @@ function connectWifiNow(ssid, password, security) {
 function showView(name) {
   if (name === state.currentView) return;
 
+  /* 화면 전환 직전 in-flight proxyFetch 일괄 취소 — stale request가 새 화면 위에
+     덮어쓰지 못하게, 그리고 행사장 WiFi/AP에 불필요한 트래픽을 남기지 않게.
+     proxyFetch는 cancelled flag를 보고 fallbackFn을 실행하지 않고 조용히 종료한다. */
+  abortInFlightProxyFetches();
+
   // QR 뷰에서 이탈하는 경우 카메라 정지
   if (state.currentView === 'qr' && name !== 'qr') stopScanner();
 
@@ -1879,21 +1884,32 @@ function supaRpc(fnName, payload) {
   }).then(function(r) { return r.json(); });
 }
 
-/* 진행 중인 proxyFetch 요청 등록부 — 화면 전환 시 abortInFlightProxyFetches()로 일괄 취소 */
+/* 진행 중인 proxyFetch 요청 등록부 — 화면 전환 시 abortInFlightProxyFetches()로 일괄 취소.
+   abortInFlightProxyFetches()는 abort 직전에 ctrl.__abortReason = 'cancelled'를 표시해
+   proxyFetch catch 분기에서 timeout vs view-change cancellation을 구분 가능하게 한다. */
 var inFlightProxyFetches = [];
 var PROXY_FETCH_TIMEOUT_MS = 5000;
 
 function abortInFlightProxyFetches() {
   for (var i = 0; i < inFlightProxyFetches.length; i++) {
-    try { inFlightProxyFetches[i].abort(); } catch (e) {}
+    var c = inFlightProxyFetches[i];
+    try {
+      c.__abortReason = 'cancelled';
+      c.abort();
+    } catch (e) {}
   }
   inFlightProxyFetches = [];
 }
 
+/* AbortError 처리 규칙 (PR #3 review 후 명확화):
+     - timeout/cancelled: fallbackFn 자동 실행 금지. err.aborted=true 와 reason(timeout|cancelled) 부여 후 throw.
+     - HTTP 4xx/5xx (proxy 응답): err.httpStatus 부여, fallbackFn 허용 가능 (호출자가 status 검사 후 결정).
+     - 기타 일반 실패 (network 오류 등): fallbackFn 허용.
+   호출자(fetchRoomsBatchChunk 등)는 err.timeout/err.cancelled/err.httpStatus를 보고
+   재시도·에러 UI·구조적 fallback 중 선택한다. */
 function proxyFetch(endpoint, fallbackFn) {
   var proxyUrl = PROXY_URL + endpoint;
-  /* AbortController + 5s timeout — 행사장 WiFi 큐잉시 무한 펜딩 방지.
-     Chrome 71+(G Pad 5)·Chrome 138 모두 지원. */
+  /* Chrome 71+(G Pad 5)·Chrome 138 모두 AbortController 지원 */
   var hasAbort = (typeof AbortController === 'function');
   var ctrl = hasAbort ? new AbortController() : null;
   var fetchOpts = {
@@ -1905,6 +1921,7 @@ function proxyFetch(endpoint, fallbackFn) {
 
   var timer = setTimeout(function() {
     if (ctrl) {
+      ctrl.__abortReason = 'timeout';
       try { ctrl.abort(); } catch (e) {}
     }
   }, PROXY_FETCH_TIMEOUT_MS);
@@ -1918,7 +1935,11 @@ function proxyFetch(endpoint, fallbackFn) {
   }
 
   return fetch(proxyUrl, fetchOpts).then(function(r) {
-    if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
+    if (!r.ok) {
+      var httpErr = new Error('Proxy HTTP ' + r.status);
+      httpErr.httpStatus = r.status;
+      throw httpErr;
+    }
     return r.json();
   }).then(function(data) {
     cleanup();
@@ -1928,14 +1949,24 @@ function proxyFetch(endpoint, fallbackFn) {
     return data;
   }).catch(function(err) {
     cleanup();
-    /* AbortError는 timeout 또는 화면 전환으로 인한 의도된 취소 → fallback에 명시적 신호 전달 */
+    var reason = (ctrl && ctrl.__abortReason) || null;
     var aborted = err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''));
+
+    /* abort/timeout: fallbackFn 자동 실행 금지. 호출자가 metadata 보고 결정. */
     if (aborted) {
-      var to = new Error('Proxy fetch timeout (' + PROXY_FETCH_TIMEOUT_MS + 'ms)');
-      to.timeout = true;
-      if (typeof fallbackFn === 'function') return fallbackFn();
-      throw to;
+      var abortErr;
+      if (reason === 'cancelled') {
+        abortErr = new Error('Proxy fetch cancelled (view change)');
+        abortErr.cancelled = true;
+      } else {
+        abortErr = new Error('Proxy fetch timeout (' + PROXY_FETCH_TIMEOUT_MS + 'ms)');
+        abortErr.timeout = true;
+      }
+      abortErr.aborted = true;
+      throw abortErr;
     }
+
+    /* HTTP/일반 실패: 기존대로 fallbackFn 허용. err.httpStatus 노출. */
     if (typeof fallbackFn === 'function') return fallbackFn();
     throw err;
   });
@@ -2103,8 +2134,7 @@ function fetchRoomsBatchChunk(events) {
   }
   var qs = '/api/rooms?event_ids=' + ids.map(encodeURIComponent).join(',');
 
-  proxyFetch(qs).then(function(rooms) {
-    /* group by event_id */
+  function dispatchRooms(rooms) {
     var grouped = {};
     for (var j = 0; j < rooms.length; j++) {
       var r = rooms[j];
@@ -2119,13 +2149,63 @@ function fetchRoomsBatchChunk(events) {
       roomsCache[id] = list;
       fillRoomActionRow(byId[id], list);
     }
-  }).catch(function(err) {
-    /* batch 실패 → 개별 fetch 로 graceful fallback */
-    SympotalkLog.push('warn', '룸 batch 실패, 개별 fetch 폴백: ' + (err && err.message || ''));
+  }
+
+  /* 모든 chunk의 룸 카드 영역에 에러 UI 표시 — 개별 fetch fallback 대신 사용자에게 새로고침 유도 */
+  function showBatchErrorUI() {
     for (var m = 0; m < events.length; m++) {
-      fetchAndFillRooms(events[m]);
+      var areaEl = document.getElementById('rooms-' + events[m].id);
+      if (areaEl) {
+        areaEl.innerHTML = '<div class="empty-rooms">' +
+          '<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+          '<div><strong>룸 정보를 불러오지 못했습니다</strong>네트워크 상태를 확인하고 새로고침해주세요.</div>' +
+        '</div>';
+      }
     }
-  });
+  }
+
+  var retryAttempted = false;
+
+  function attempt() {
+    proxyFetch(qs).then(dispatchRooms).catch(function(err) {
+      /* (a) 화면 전환으로 인한 취소 — 새 화면이 자체 로직 갖고 있으므로 조용히 종료. UI/로그 모두 X. */
+      if (err && err.cancelled) {
+        return;
+      }
+
+      /* (b) timeout — 개별 fetch 폴백 절대 금지 (burst 회피 목적 위배).
+             jitter 300~1000ms 후 batch 1회만 재시도. 그래도 실패하면 에러 UI 노출. */
+      if (err && err.timeout) {
+        if (!retryAttempted) {
+          retryAttempted = true;
+          var jitter = 300 + Math.floor(Math.random() * 700);
+          SympotalkLog.push('warn', '룸 batch timeout — ' + jitter + 'ms 후 1회 재시도');
+          setTimeout(attempt, jitter);
+          return;
+        }
+        SympotalkLog.push('error', '룸 batch timeout (재시도 실패)', '네트워크 상태를 확인하고 새로고침해주세요.');
+        showBatchErrorUI();
+        return;
+      }
+
+      /* (c) 구조적 실패 — batch endpoint 미지원/잘못된 요청만 개별 fallback 허용.
+             400 (잘못된 event_ids), 404 (endpoint 없음), 405 (Method), 501 (Not Implemented). */
+      var status = err && err.httpStatus;
+      if (status === 400 || status === 404 || status === 405 || status === 501) {
+        SympotalkLog.push('warn', '룸 batch endpoint 미지원 (HTTP ' + status + ') — 개별 fetch 폴백');
+        for (var n = 0; n < events.length; n++) {
+          fetchAndFillRooms(events[n]);
+        }
+        return;
+      }
+
+      /* (d) 기타 일반 실패 (5xx 등) — burst 회피 위해 개별 fallback 안 함, 에러 UI 노출. */
+      SympotalkLog.push('error', '룸 batch 실패: ' + (err && err.message || ''), '네트워크 상태를 확인하고 새로고침해주세요.');
+      showBatchErrorUI();
+    });
+  }
+
+  attempt();
 }
 
 /** 골격 HTML — 룸 영역은 placeholder */
